@@ -3279,7 +3279,7 @@ class FloatingNotificationManager {
         }
     }
     
-    func show(title: String, subtitle: String = "", body: String, duration: TimeInterval = 8.0, showCloseButton: Bool = false) {
+    func show(title: String, subtitle: String = "", body: String, duration: TimeInterval = 8.0) {
         DispatchQueue.main.async {
             self.dismiss()
             NSSound(named: "Glass")?.play()
@@ -3293,7 +3293,7 @@ class FloatingNotificationManager {
                 onSnooze: nil,
                 onSkip: nil,
                 onDismiss: { self.dismiss() },
-                showCloseButton: showCloseButton
+                showCloseButton: true  // Always show X button
             )
 
             self.showWindow(with: notificationView, height: 90, duration: duration)
