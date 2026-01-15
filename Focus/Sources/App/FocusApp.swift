@@ -3279,11 +3279,11 @@ class FloatingNotificationManager {
         }
     }
     
-    func show(title: String, subtitle: String = "", body: String, duration: TimeInterval = 8.0) {
+    func show(title: String, subtitle: String = "", body: String, duration: TimeInterval = 8.0, showCloseButton: Bool = false) {
         DispatchQueue.main.async {
             self.dismiss()
             NSSound(named: "Glass")?.play()
-            
+
             let notificationView = FloatingNotificationView(
                 title: title,
                 subtitle: subtitle,
@@ -3292,10 +3292,11 @@ class FloatingNotificationManager {
                 onDone: nil,
                 onSnooze: nil,
                 onSkip: nil,
-                onDismiss: { self.dismiss() }
+                onDismiss: { self.dismiss() },
+                showCloseButton: showCloseButton
             )
-            
-            self.showWindow(with: notificationView, height: 100, duration: duration)
+
+            self.showWindow(with: notificationView, height: 90, duration: duration)
         }
     }
     
@@ -3303,11 +3304,11 @@ class FloatingNotificationManager {
         DispatchQueue.main.async {
             self.dismiss()
             NSSound(named: "Glass")?.play()
-            
+
             let timeStr = self.formatTime12Hour(hour: task.startHour, minute: task.startMinute)
             let isNow = minutesBefore == 0
             let message = isNow ? "Starting now!" : "Starting in \(minutesBefore) min • \(timeStr)"
-            
+
             let notificationView = FloatingNotificationView(
                 title: "Task Reminder",
                 subtitle: task.title,
@@ -3325,9 +3326,10 @@ class FloatingNotificationManager {
                     self.skipTask(task)
                     self.dismiss()
                 },
-                onDismiss: { self.dismiss() }
+                onDismiss: { self.dismiss() },
+                showCloseButton: true
             )
-            
+
             self.showWindow(with: notificationView, height: 140, duration: 30.0)
         }
     }
@@ -3525,6 +3527,7 @@ struct FloatingNotificationView: View {
     let onSkip: (() -> Void)?
     let onDismiss: () -> Void
     var iconName: String = "bell.fill"
+    var showCloseButton: Bool = true
     
     @State private var isAppearing = false
     
@@ -3553,7 +3556,7 @@ struct FloatingNotificationView: View {
             
             // Content
             VStack(alignment: .leading, spacing: 6) {
-                // Header row
+                // Header row with title
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Project Next")
@@ -3570,16 +3573,11 @@ struct FloatingNotificationView: View {
                     
                     Spacer(minLength: 8)
                     
-                    // Time and close
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("now")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                        
-                        // X close button
-                        CloseButton(onDismiss: onDismiss)
-                    }
-                    .opacity(isAppearing ? 1 : 0)
+                    // Time label
+                    Text("now")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .opacity(isAppearing ? 1 : 0)
                 }
                 
                 // Message
@@ -3650,6 +3648,7 @@ struct FloatingNotificationView: View {
             }
         }
         .padding(14)
+        .padding(.trailing, showCloseButton ? 24 : 0) // Extra space for close button
         .frame(width: 360)
         .background(
             RoundedRectangle(cornerRadius: 16)
@@ -3661,6 +3660,14 @@ struct FloatingNotificationView: View {
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
+        .overlay(alignment: .topTrailing) {
+            // X close button in top-right corner
+            if showCloseButton {
+                CloseButton(onDismiss: onDismiss)
+                    .frame(width: 20, height: 20)
+                    .padding(10)
+            }
+        }
         .scaleEffect(isAppearing ? 1 : 0.9)
         .offset(x: isAppearing ? 0 : 50)
         .opacity(isAppearing ? 1 : 0)
