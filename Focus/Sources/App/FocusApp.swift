@@ -637,46 +637,63 @@ struct TaskRowAnimated: View {
     
     @State private var slideOffset: CGFloat = 0
     @State private var rowOpacity: Double = 1
-    @State private var showCompletedBadge = false
+    @State private var rowScale: CGFloat = 1.0
+    @State private var isSliding = false
     
     var body: some View {
         ZStack(alignment: .trailing) {
-            // "Completed" badge that shows briefly
-            if showCompletedBadge {
-                HStack {
-                    Spacer()
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 12))
-                        Text("Done!")
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                    .foregroundColor(.green)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.green.opacity(0.15))
-                    .clipShape(Capsule())
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            // Green success background that reveals during slide
+            HStack {
+                Spacer()
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16))
+                    Text("Completed!")
+                        .font(.system(size: 12, weight: .semibold))
                 }
-                .padding(.trailing, 8)
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.green)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .opacity(isSliding ? 1 : 0)
             
             // Main row content
             HStack(spacing: 10) {
                 // Animated Checkbox
                 AnimatedCheckbox(isCompleted: task.isCompleted) {
                     if !task.isCompleted {
-                        // Show completion animation
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                            slideOffset = 15
-                            showCompletedBadge = true
+                        // COMPLETING: Slide right slowly then fade
+                        isSliding = true
+                        
+                        // Step 1: Slight bounce
+                        withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                            rowScale = 1.02
                         }
                         
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                slideOffset = 0
-                                showCompletedBadge = false
+                        // Step 2: Slide to the right slowly
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            withAnimation(.easeInOut(duration: 0.5)) {
+                                slideOffset = 80
+                                rowScale = 0.98
                             }
+                        }
+                        
+                        // Step 3: Fade out and slide more
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                slideOffset = 150
+                                rowOpacity = 0
+                            }
+                        }
+                        
+                        // Step 4: Reset after animation (task will move to Completed list)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                            slideOffset = 0
+                            rowOpacity = 1
+                            rowScale = 1.0
+                            isSliding = false
                         }
                     }
                     Task { await taskManager.toggleComplete(task: task) }
@@ -732,15 +749,16 @@ struct TaskRowAnimated: View {
                     }
                 }
             }
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(nsColor: NSColor.controlBackgroundColor))
+            )
             .offset(x: slideOffset)
             .opacity(rowOpacity)
+            .scaleEffect(rowScale)
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: NSColor.controlBackgroundColor))
-                .opacity(task.isCompleted ? 0.7 : 1)
-        )
+        .clipShape(RoundedRectangle(cornerRadius: 8))
         .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
