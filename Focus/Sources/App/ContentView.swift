@@ -962,25 +962,26 @@ struct FullCalendarView: View {
     @State private var showAddTask = false
     @State private var showAddTodo = false
     @State private var taskToEdit: TaskItem?
-    
+    @State private var isAppearing = false
+
     // Drag to create (day view)
     @State private var isDragging = false
     @State private var dragStartY: CGFloat = 0
     @State private var dragCurrentY: CGFloat = 0
     @State private var dragStartTime: Date?
     @State private var dragEndTime: Date?
-    
+
     // Drag to create (week view)
     @State private var weekDragDay: Date?
     @State private var weekDragStartY: CGFloat = 0
     @State private var weekDragCurrentY: CGFloat = 0
     @State private var isWeekDragging = false
-    
+
     // Resize task
     @State private var resizingTaskId: String?
     @State private var resizeStartHeight: CGFloat = 0
     @State private var resizeDelta: CGFloat = 0
-    
+
     enum CalendarViewMode: String, CaseIterable {
         case day = "Day"
         case week = "Week"
@@ -992,16 +993,32 @@ struct FullCalendarView: View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
                 dateNavigation
-                
+                    .opacity(isAppearing ? 1 : 0)
+                    .offset(y: isAppearing ? 0 : -10)
+
                 if viewMode == .day {
                     dayView
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .leading).combined(with: .opacity),
+                            removal: .move(edge: .trailing).combined(with: .opacity)
+                        ))
                 } else {
                     weekView
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
+            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: viewMode)
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                isAppearing = true
+            }
         }
         .sheet(isPresented: $showTaskPopup) {
             if let task = selectedTask {

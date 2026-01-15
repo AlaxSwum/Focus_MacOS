@@ -160,7 +160,8 @@ struct MenuBarDropdownView: View {
     @State private var selectedTab = 0
     @State private var todaySubTab = 0  // 0 = Upcoming, 1 = Completed
     @State private var selectedMeeting: TaskItem?
-    @State private var tabDirection: Int = 0  // -1 left, 1 right for animation
+    @State private var tabDirection: Int = 0
+    @State private var isAppearing = false
     @Namespace private var tabAnimation
     
     var body: some View {
@@ -174,15 +175,14 @@ struct MenuBarDropdownView: View {
             }
             .opacity(selectedMeeting == nil ? 1 : 0)
             .scaleEffect(selectedMeeting == nil ? 1 : 0.95)
+            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: selectedMeeting == nil)
             
-            // Meeting Details overlay (inline, not a sheet)
+            // Meeting Details overlay
             if let meeting = selectedMeeting {
                 MeetingDetailsInline(meeting: meeting, onClose: { 
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                         selectedMeeting = nil
                     }
-                    // Send notification
-                    sendLocalNotification(title: "Meeting Closed", body: "Returned to main view")
                 })
                     .environmentObject(taskManager)
                     .transition(.asymmetric(
@@ -193,26 +193,18 @@ struct MenuBarDropdownView: View {
         }
         .frame(width: 380, height: 500)
         .background(Color(nsColor: NSColor.windowBackgroundColor))
+        .scaleEffect(isAppearing ? 1 : 0.95)
+        .opacity(isAppearing ? 1 : 0)
         .onAppear {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                isAppearing = true
+            }
             if let userId = authManager.currentUser?.id {
                 Task {
                     await taskManager.fetchTasks(for: userId)
                 }
             }
-            // Welcome notification
-            sendLocalNotification(title: "Project Next", body: "Ready to help you stay productive!")
         }
-    }
-    
-    // Send local notification helper
-    private func sendLocalNotification(title: String, body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
     }
     
     private var headerView: some View {
@@ -291,9 +283,6 @@ struct MenuBarDropdownView: View {
                 tabDirection = index > oldTab ? 1 : -1
                 selectedTab = index
             }
-            // Haptic-like notification
-            let tabNames = ["Today", "Todo", "Meetings"]
-            sendLocalNotification(title: "Switched to \(tabNames[index])", body: "Viewing your \(tabNames[index].lowercased()) items")
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: icon)
@@ -585,7 +574,6 @@ struct MenuBarDropdownView: View {
             // Add Todo Button at bottom with gradient
             Button {
                 openAddTodoWindow()
-                sendLocalNotification(title: "Add Todo", body: "Create a new todo item")
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "plus.circle.fill")
@@ -1442,7 +1430,6 @@ struct MeetingDetailsInline: View {
                         Button {
                             if let url = URL(string: link) {
                                 NSWorkspace.shared.open(url)
-                                sendNotification(title: "Joining Meeting", body: meeting.title)
                             }
                         } label: {
                             HStack(spacing: 8) {
@@ -1518,8 +1505,6 @@ struct MeetingDetailsInline: View {
     }
     
     private func openMeetingNotesWindow() {
-        sendNotification(title: "Opening Notes", body: "Loading meeting notes for \(meeting.title)")
-        
         let contentView = MeetingNotesView(meeting: meeting, onBack: {})
             .environmentObject(TaskManager.shared)
         
@@ -1531,15 +1516,6 @@ struct MeetingDetailsInline: View {
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-    }
-    
-    private func sendNotification(title: String, body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
     }
 }
 
@@ -2725,7 +2701,10 @@ struct FullAppWindowView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var taskManager: TaskManager
     @State private var selectedTab = 0
-    
+    @State private var isAppearing = false
+    @State private var tabDirection: Int = 0
+    @Namespace private var fullAppAnimation
+
     private static let logoPath = "/Users/swumpyaesone/Documents/project_management/frontend/assets/logo/projectnextlogo.png"
 
     var body: some View {
@@ -2735,9 +2714,18 @@ struct FullAppWindowView: View {
 
             if authManager.isAuthenticated {
                 mainContent
+                    .opacity(isAppearing ? 1 : 0)
+                    .scaleEffect(isAppearing ? 1 : 0.98)
             } else {
                 LoginView()
                     .environmentObject(authManager)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+        }
+        .animation(.spring(response: 0.5, dampingFraction: 0.85), value: authManager.isAuthenticated)
+        .onAppear {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                isAppearing = true
             }
         }
     }
@@ -2745,8 +2733,9 @@ struct FullAppWindowView: View {
     private var mainContent: some View {
         VStack(spacing: 0) {
             headerBar
+                .transition(.move(edge: .top).combined(with: .opacity))
 
-            // Main content area
+            // Main content area with smooth transitions
             ZStack {
                 Color(nsColor: NSColor.windowBackgroundColor)
 
@@ -2755,16 +2744,25 @@ struct FullAppWindowView: View {
                     FullCalendarView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: tabDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: tabDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
+                        ))
                 case 1:
                     FullMeetingsView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: tabDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: tabDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
+                        ))
                 default:
                     FullCalendarView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
                 }
             }
+            .animation(.spring(response: 0.45, dampingFraction: 0.85), value: selectedTab)
         }
         .frame(minWidth: 1200, minHeight: 800)
         .onAppear {
@@ -2878,21 +2876,39 @@ struct FullAppWindowView: View {
     
     private func tabButton(_ title: String, icon: String, index: Int) -> some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            let oldTab = selectedTab
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                tabDirection = index > oldTab ? 1 : -1
                 selectedTab = index
             }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 11))
+                    .font(.system(size: 12, weight: selectedTab == index ? .semibold : .regular))
+                    .symbolEffect(.bounce, value: selectedTab == index)
                 Text(title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: selectedTab == index ? .semibold : .medium))
             }
             .foregroundColor(selectedTab == index ? .white : .secondary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(selectedTab == index ? Color.accentColor : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .background(
+                ZStack {
+                    if selectedTab == index {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.accentColor, Color.accentColor.opacity(0.85)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .matchedGeometryEffect(id: "fullAppTab", in: fullAppAnimation)
+                            .shadow(color: Color.accentColor.opacity(0.25), radius: 4, y: 2)
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
     }
