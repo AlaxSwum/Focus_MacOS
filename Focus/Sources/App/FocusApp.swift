@@ -156,7 +156,6 @@ struct MenuBarIconView: View {
 // Project Next Logo - loads from app bundle
 struct ProjectNextLogo: View {
     var size: CGFloat = 24
-    @State private var isAnimating = false
     
     var body: some View {
         Group {
@@ -165,12 +164,6 @@ struct ProjectNextLogo: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: size, height: size)
-                    .scaleEffect(isAnimating ? 1.0 : 0.95)
-                    .onAppear {
-                        withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
-                            isAnimating = true
-                        }
-                    }
             } else {
                 // Fallback if file not found
                 fallbackLogo
@@ -2960,8 +2953,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private var monitorTimer: Timer?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Set app icon from bundle
-        if let iconImage = Bundle.main.image(forResource: "AppLogo") {
+        // Set dock icon from bundle using global loader
+        if let iconImage = loadAppLogo() {
             NSApp.applicationIconImage = iconImage
         }
 
