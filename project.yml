@@ -1,0 +1,60 @@
+name: Focus
+options:
+  bundleIdPrefix: com.focusproject
+  xcodeVersion: "15.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  Focus-iOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Focus/Sources
+        excludes:
+          - "**/MenuBarView.swift"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.focusproject.focus.ios
+        INFOPLIST_KEY_CFBundleDisplayName: Focus
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        GENERATE_INFOPLIST_FILE: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        
+  Focus-macOS:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Focus/Sources
+      - path: Focus/Resources
+        type: folder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.focusproject.focus.macos
+        INFOPLIST_KEY_CFBundleDisplayName: Focus
+        GENERATE_INFOPLIST_FILE: true
+        ENABLE_HARDENED_RUNTIME: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    entitlements:
+      path: Focus/Focus.entitlements
+
+schemes:
+  Focus-iOS:
+    build:
+      targets:
+        Focus-iOS: all
+    run:
+      config: Debug
+      
+  Focus-macOS:
+    build:
+      targets:
+        Focus-macOS: all
+    run:
+      config: Debug
