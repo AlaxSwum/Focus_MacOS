@@ -494,9 +494,9 @@ class TaskManager: ObservableObject {
         case "timeblock":
             tableName = "time_blocks"
         case "todo":
-            tableName = "personal_todos"  // Fixed: was "todos", should be "personal_todos"
+            tableName = "personal_todos"
         case "meeting":
-            tableName = "meetings"
+            tableName = "projects_meeting"  // Fixed: was "meetings", should be "projects_meeting"
         default:
             print("Unknown task type: \(task.originalType), skipping database update")
             return
