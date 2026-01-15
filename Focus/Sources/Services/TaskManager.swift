@@ -92,13 +92,16 @@ class TaskManager: ObservableObject {
     }
     
     func toggleComplete(task: TaskItem) async {
+        // Calculate new completion state BEFORE toggling local state
+        let newCompletedState = !task.isCompleted
+        
         // Update local state immediately
         if let index = todayTasks.firstIndex(where: { $0.id == task.id }) {
-            todayTasks[index].isCompleted.toggle()
+            todayTasks[index].isCompleted = newCompletedState
         }
         
-        // Update in database
-        await updateTaskCompletion(task: task, completed: !task.isCompleted)
+        // Update in database with the NEW state
+        await updateTaskCompletion(task: task, completed: newCompletedState)
     }
     
     func skipTask(_ task: TaskItem, reason: String?) {
@@ -491,13 +494,15 @@ class TaskManager: ObservableObject {
         case "timeblock":
             tableName = "time_blocks"
         case "todo":
-            tableName = "todos"
+            tableName = "personal_todos"  // Fixed: was "todos", should be "personal_todos"
         case "meeting":
             tableName = "meetings"
         default:
             print("Unknown task type: \(task.originalType), skipping database update")
             return
         }
+        
+        print("DEBUG: Updating \(tableName) id=\(task.originalId) completed=\(completed)")
         
         do {
             let url = URL(string: "\(supabaseURL)/rest/v1/\(tableName)?id=eq.\(task.originalId)")!
@@ -509,10 +514,11 @@ class TaskManager: ObservableObject {
             request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
             request.httpBody = try JSONEncoder().encode(["completed": completed])
             
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
             if let httpResponse = response as? HTTPURLResponse {
+                print("DEBUG: \(tableName) update response: \(httpResponse.statusCode)")
                 if !(200...299).contains(httpResponse.statusCode) {
-                    print("Failed to update \(tableName): HTTP \(httpResponse.statusCode)")
+                    print("DEBUG: Response body: \(String(data: data, encoding: .utf8) ?? "none")")
                 }
             }
         } catch {
