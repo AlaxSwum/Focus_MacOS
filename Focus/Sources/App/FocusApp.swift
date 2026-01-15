@@ -123,79 +123,123 @@ func loadAppLogo() -> NSImage? {
     return nil
 }
 
-// MARK: - Animated Checkbox
+// MARK: - Animated Checkbox with Check Drawing Animation
 struct AnimatedCheckbox: View {
     let isCompleted: Bool
     let action: () -> Void
     
-    @State private var scale: CGFloat = 1.0
-    @State private var rotation: Double = 0
-    @State private var showParticles = false
+    @State private var checkProgress: CGFloat = 0
+    @State private var circleScale: CGFloat = 1.0
+    @State private var fillOpacity: CGFloat = 0
+    @State private var showRipple = false
     
     var body: some View {
         Button(action: {
-            // Trigger animation
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
-                scale = 1.3
-            }
-            
-            // Show particles if completing
             if !isCompleted {
-                showParticles = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    showParticles = false
+                // Completing task - animate the check drawing
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    circleScale = 0.9
                 }
-            }
-            
-            // Reset scale
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
-                    scale = 1.0
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                        circleScale = 1.1
+                        fillOpacity = 1
+                    }
+                }
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        checkProgress = 1
+                    }
+                }
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                        circleScale = 1.0
+                    }
+                    showRipple = true
+                }
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    showRipple = false
+                }
+            } else {
+                // Uncompleting - reverse animation
+                withAnimation(.easeOut(duration: 0.2)) {
+                    checkProgress = 0
+                    fillOpacity = 0
                 }
             }
             
             action()
         }) {
             ZStack {
+                // Ripple effect
+                if showRipple {
+                    Circle()
+                        .stroke(Color.green.opacity(0.5), lineWidth: 2)
+                        .frame(width: 22, height: 22)
+                        .scaleEffect(showRipple ? 2 : 1)
+                        .opacity(showRipple ? 0 : 1)
+                        .animation(.easeOut(duration: 0.5), value: showRipple)
+                }
+                
                 // Background circle
                 Circle()
-                    .strokeBorder(isCompleted ? Color.green : Color.gray.opacity(0.4), lineWidth: 2)
+                    .strokeBorder(
+                        isCompleted ? Color.green : Color.gray.opacity(0.4),
+                        lineWidth: 2
+                    )
                     .frame(width: 22, height: 22)
                 
                 // Filled circle when completed
-                if isCompleted {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 22, height: 22)
-                        .transition(.scale.combined(with: .opacity))
-                    
-                    // Checkmark
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white)
-                        .transition(.scale.combined(with: .opacity))
-                }
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 22, height: 22)
+                    .opacity(isCompleted ? 1 : fillOpacity)
                 
-                // Celebration particles
-                if showParticles {
-                    ForEach(0..<8, id: \.self) { i in
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 4, height: 4)
-                            .offset(
-                                x: showParticles ? cos(Double(i) * .pi / 4) * 20 : 0,
-                                y: showParticles ? sin(Double(i) * .pi / 4) * 20 : 0
-                            )
-                            .opacity(showParticles ? 0 : 1)
-                            .animation(.easeOut(duration: 0.4).delay(Double(i) * 0.02), value: showParticles)
-                    }
+                // Animated checkmark path
+                if isCompleted || checkProgress > 0 {
+                    CheckmarkShape()
+                        .trim(from: 0, to: isCompleted ? 1 : checkProgress)
+                        .stroke(Color.white, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                        .frame(width: 10, height: 8)
                 }
             }
-            .scaleEffect(scale)
+            .scaleEffect(circleScale)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .animation(.spring(response: 0.35, dampingFraction: 0.6), value: isCompleted)
+        .onChange(of: isCompleted) { oldValue, newValue in
+            if newValue {
+                checkProgress = 1
+                fillOpacity = 1
+            } else {
+                checkProgress = 0
+                fillOpacity = 0
+            }
+        }
+    }
+}
+
+// Custom checkmark shape for drawing animation
+struct CheckmarkShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        // Start from left, go down to bottom-middle, then up to right
+        let startX = rect.minX
+        let startY = rect.midY
+        let midX = rect.width * 0.35
+        let midY = rect.maxY
+        let endX = rect.maxX
+        let endY = rect.minY
+        
+        path.move(to: CGPoint(x: startX, y: startY))
+        path.addLine(to: CGPoint(x: midX, y: midY))
+        path.addLine(to: CGPoint(x: endX, y: endY))
+        
+        return path
     }
 }
 
@@ -277,6 +321,7 @@ struct MenuBarDropdownView: View {
     @State private var todaySubTab = 0  // 0 = Upcoming, 1 = Completed
     @State private var selectedMeeting: TaskItem?
     @State private var tabDirection: Int = 0
+    @State private var isHoveringFooter = false
     
     var body: some View {
         ZStack {
@@ -525,74 +570,139 @@ struct MenuBarDropdownView: View {
     
     // Unified row style for both tasks and meetings
     private func unifiedTaskRow(_ task: TaskItem) -> some View {
-        HStack(spacing: 10) {
-            // Animated Checkbox
-            AnimatedCheckbox(isCompleted: task.isCompleted) {
-                Task { await taskManager.toggleComplete(task: task) }
-            }
-            .frame(width: 32, height: 32)
-            
-            // Icon
-            ZStack {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(taskColor(task).opacity(0.15))
-                    .frame(width: 28, height: 28)
-                Image(systemName: taskIcon(task))
-                    .font(.system(size: 12))
-                    .foregroundColor(taskColor(task))
-            }
-            
-            // Content
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(task.isCompleted ? .secondary : .primary)
-                    .strikethrough(task.isCompleted)
-                    .lineLimit(1)
-                
-                HStack(spacing: 4) {
-                    Image(systemName: "clock")
-                        .font(.system(size: 9))
-                    Text(task.timeText)
-                        .font(.system(size: 10))
-                }
-                .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            // Type badge + chevron for meetings
-            HStack(spacing: 6) {
-                Text(task.type == .meeting ? "Meeting" : task.type.displayName)
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundColor(taskColor(task))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(taskColor(task).opacity(0.1))
-                    .clipShape(Capsule())
-                
-                if task.type == .meeting {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: NSColor.controlBackgroundColor))
-        )
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            // Double-click opens meeting details
+        TaskRowAnimated(task: task, taskManager: taskManager, taskColor: taskColor(task), taskIcon: taskIcon(task)) {
             if task.type == .meeting {
                 selectedMeeting = task
             }
         }
     }
+}
+
+// Animated Task Row Component
+struct TaskRowAnimated: View {
+    let task: TaskItem
+    @ObservedObject var taskManager: TaskManager
+    let taskColor: Color
+    let taskIcon: String
+    var onDoubleTap: (() -> Void)? = nil
     
-    private func taskColor(_ task: TaskItem) -> Color {
+    @State private var slideOffset: CGFloat = 0
+    @State private var rowOpacity: Double = 1
+    @State private var showCompletedBadge = false
+    
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            // "Completed" badge that shows briefly
+            if showCompletedBadge {
+                HStack {
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 12))
+                        Text("Done!")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(.green)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.green.opacity(0.15))
+                    .clipShape(Capsule())
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+                .padding(.trailing, 8)
+            }
+            
+            // Main row content
+            HStack(spacing: 10) {
+                // Animated Checkbox
+                AnimatedCheckbox(isCompleted: task.isCompleted) {
+                    if !task.isCompleted {
+                        // Show completion animation
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                            slideOffset = 15
+                            showCompletedBadge = true
+                        }
+                        
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                slideOffset = 0
+                                showCompletedBadge = false
+                            }
+                        }
+                    }
+                    Task { await taskManager.toggleComplete(task: task) }
+                }
+                .frame(width: 32, height: 32)
+                
+                // Icon
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(taskColor.opacity(task.isCompleted ? 0.08 : 0.15))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: taskIcon)
+                        .font(.system(size: 12))
+                        .foregroundColor(task.isCompleted ? taskColor.opacity(0.5) : taskColor)
+                }
+                .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
+                
+                // Content
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(task.isCompleted ? .secondary : .primary)
+                        .strikethrough(task.isCompleted, color: .secondary)
+                        .lineLimit(1)
+                        .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
+                    
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 9))
+                        Text(task.timeText)
+                            .font(.system(size: 10))
+                    }
+                    .foregroundColor(.secondary)
+                    .opacity(task.isCompleted ? 0.6 : 1)
+                }
+                
+                Spacer()
+                
+                // Type badge + chevron for meetings
+                HStack(spacing: 6) {
+                    Text(task.type == .meeting ? "Meeting" : task.type.displayName)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(task.isCompleted ? taskColor.opacity(0.5) : taskColor)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(taskColor.opacity(task.isCompleted ? 0.05 : 0.1))
+                        .clipShape(Capsule())
+                    
+                    if task.type == .meeting {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .offset(x: slideOffset)
+            .opacity(rowOpacity)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(nsColor: NSColor.controlBackgroundColor))
+                .opacity(task.isCompleted ? 0.7 : 1)
+        )
+        .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            onDoubleTap?()
+        }
+    }
+}
+
+// Extension to add back the helper functions to MenuBarDropdownView
+extension MenuBarDropdownView {
+    func taskColor(_ task: TaskItem) -> Color {
         switch task.type {
         case .meeting: return .purple
         case .todo: return .blue
@@ -793,9 +903,7 @@ struct MenuBarDropdownView: View {
         }
         .buttonStyle(.plain)
     }
-    
-    @State private var isHoveringFooter = false
-    
+
     private var footerView: some View {
         Button {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
