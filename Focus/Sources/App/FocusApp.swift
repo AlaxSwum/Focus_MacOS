@@ -542,33 +542,51 @@ struct MenuBarDropdownView: View {
         todayTasks.filter { $0.isCompleted }
     }
     
+    @State private var subTabDirection: Int = 0
+    
     private var todayContent: some View {
         VStack(spacing: 0) {
-            // Upcoming / Completed toggle
+            // Upcoming / Completed toggle with smooth animation
             HStack(spacing: 0) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { todaySubTab = 0 }
+                    subTabDirection = -1
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { todaySubTab = 0 }
                 } label: {
-                    Text("Upcoming (\(upcomingTasks.count))")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(todaySubTab == 0 ? .white : .secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(todaySubTab == 0 ? Color.accentColor : Color.clear)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 9))
+                        Text("Upcoming (\(upcomingTasks.count))")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(todaySubTab == 0 ? .white : .secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(todaySubTab == 0 ? Color.accentColor : Color.clear)
+                    )
+                    .scaleEffect(todaySubTab == 0 ? 1.02 : 1.0)
                 }
                 .buttonStyle(.plain)
                 
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { todaySubTab = 1 }
+                    subTabDirection = 1
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { todaySubTab = 1 }
                 } label: {
-                    Text("Completed (\(completedTasks.count))")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(todaySubTab == 1 ? .white : .secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(todaySubTab == 1 ? Color.green : Color.clear)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle")
+                            .font(.system(size: 9))
+                        Text("Completed (\(completedTasks.count))")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(todaySubTab == 1 ? .white : .secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(todaySubTab == 1 ? Color.green : Color.clear)
+                    )
+                    .scaleEffect(todaySubTab == 1 ? 1.02 : 1.0)
                 }
                 .buttonStyle(.plain)
             }
@@ -576,17 +594,26 @@ struct MenuBarDropdownView: View {
             .background(Color(nsColor: NSColor.controlBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .padding(.bottom, 8)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: todaySubTab)
             
-            // Task list based on sub-tab
-            let tasks = todaySubTab == 0 ? upcomingTasks : completedTasks
-            
-            if tasks.isEmpty {
-                emptyStateView(todaySubTab == 0 ? "All caught up!" : "No completed tasks")
-            } else {
-                ForEach(tasks) { task in
-                    unifiedTaskRow(task)
+            // Task list with smooth transition
+            Group {
+                let tasks = todaySubTab == 0 ? upcomingTasks : completedTasks
+                
+                if tasks.isEmpty {
+                    emptyStateView(todaySubTab == 0 ? "All caught up!" : "No completed tasks")
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                } else {
+                    ForEach(tasks) { task in
+                        unifiedTaskRow(task)
+                    }
+                    .transition(.asymmetric(
+                        insertion: .move(edge: subTabDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: subTabDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
+                    ))
                 }
             }
+            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: todaySubTab)
         }
     }
     
