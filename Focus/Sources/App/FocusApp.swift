@@ -3335,25 +3335,27 @@ class FloatingNotificationManager {
     private func showWindow(with view: FloatingNotificationView, height: CGFloat, duration: TimeInterval) {
         let windowWidth: CGFloat = 360
         let windowHeight: CGFloat = height
-        
+
         let hostingView = NSHostingView(rootView: view)
         hostingView.frame = NSRect(x: 0, y: 0, width: windowWidth, height: windowHeight)
-        
+
         guard let screen = NSScreen.main else { return }
         let screenFrame = screen.visibleFrame
-        
-        // Position in top-right corner like Apple notifications
-        let windowX = screenFrame.maxX - windowWidth - 16
+
+        // Start position: off-screen to the right
+        let startX = screenFrame.maxX + 20
+        // End position: top-right corner
+        let endX = screenFrame.maxX - windowWidth - 16
         let windowY = screenFrame.maxY - windowHeight - 8
-        
+
         // Create a floating panel (like system notifications)
         let panel = NSPanel(
-            contentRect: NSRect(x: windowX, y: windowY, width: windowWidth, height: windowHeight),
+            contentRect: NSRect(x: startX, y: windowY, width: windowWidth, height: windowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        
+
         panel.contentView = hostingView
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -3363,23 +3365,20 @@ class FloatingNotificationManager {
         panel.isMovableByWindowBackground = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
+        panel.alphaValue = 0
         panel.isFloatingPanel = true
         
         // Store reference
         self.notificationPanel = panel
         
-        // Show panel
-        panel.alphaValue = 0
+        // Show panel (starts off-screen)
         panel.orderFrontRegardless()
         
-        // Slide in animation from right
-        let startX = screenFrame.maxX + 20
-        panel.setFrameOrigin(NSPoint(x: startX, y: windowY))
-        
+        // Smooth slide-in animation from right
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.35
+            context.duration = 0.4
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().setFrameOrigin(NSPoint(x: windowX, y: windowY))
+            panel.animator().setFrameOrigin(NSPoint(x: endX, y: windowY))
             panel.animator().alphaValue = 1
         }
         
@@ -3468,21 +3467,17 @@ struct FloatingNotificationView: View {
     let onDismiss: () -> Void
     var iconName: String = "bell.fill"
     
+    @State private var isAppearing = false
+    @State private var isHoveringClose = false
+    
     var hasActions: Bool {
         onDone != nil || onSnooze != nil || onSkip != nil
     }
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            // App logo
-            if let logoImage = NSImage(named: "AppIcon") {
-                Image(nsImage: logoImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 40, height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-            } else {
-                // Fallback icon
+            // App logo with animation
+            ZStack {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(LinearGradient(
                         colors: [Color.purple, Color.pink],
@@ -3490,12 +3485,13 @@ struct FloatingNotificationView: View {
                         endPoint: .bottomTrailing
                     ))
                     .frame(width: 40, height: 40)
-                    .overlay(
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white)
-                    )
+                
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.white)
             }
+            .scaleEffect(isAppearing ? 1 : 0.5)
+            .opacity(isAppearing ? 1 : 0)
             
             // Content
             VStack(alignment: .leading, spacing: 6) {
@@ -3511,6 +3507,8 @@ struct FloatingNotificationView: View {
                             .foregroundColor(.primary.opacity(0.9))
                             .lineLimit(2)
                     }
+                    .offset(x: isAppearing ? 0 : -20)
+                    .opacity(isAppearing ? 1 : 0)
                     
                     Spacer(minLength: 8)
                     
@@ -3520,18 +3518,21 @@ struct FloatingNotificationView: View {
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                         
-                        Button {
-                            onDismiss()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 18))
-                                .foregroundColor(.secondary.opacity(0.6))
-                        }
-                        .buttonStyle(.plain)
-                        .onTapGesture {
-                            onDismiss()
-                        }
+                        // Fixed X button - single click handler
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(isHoveringClose ? .primary : .secondary.opacity(0.6))
+                            .scaleEffect(isHoveringClose ? 1.1 : 1.0)
+                            .onHover { hovering in
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    isHoveringClose = hovering
+                                }
+                            }
+                            .onTapGesture {
+                                onDismiss()
+                            }
                     }
+                    .opacity(isAppearing ? 1 : 0)
                 }
                 
                 // Message
@@ -3613,6 +3614,14 @@ struct FloatingNotificationView: View {
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
+        .scaleEffect(isAppearing ? 1 : 0.9)
+        .offset(x: isAppearing ? 0 : 50)
+        .opacity(isAppearing ? 1 : 0)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.35)) {
+                isAppearing = true
+            }
+        }
     }
 }
 
