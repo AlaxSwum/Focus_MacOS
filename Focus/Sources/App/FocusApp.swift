@@ -3315,16 +3315,16 @@ class FloatingNotificationManager {
                 message: message,
                 task: task,
                 onDone: {
+                    // markTaskDone shows its own notification, don't call dismiss after
                     self.markTaskDone(task)
-                    self.dismiss()
                 },
                 onSnooze: {
+                    // snoozeTask shows its own notification, don't call dismiss after
                     self.snoozeTask(task)
-                    self.dismiss()
                 },
                 onSkip: {
+                    // skipTask shows its own notification, don't call dismiss after
                     self.skipTask(task)
-                    self.dismiss()
                 },
                 onDismiss: { self.dismiss() },
                 showCloseButton: true
@@ -3433,10 +3433,12 @@ class FloatingNotificationManager {
     }
     
     private func markTaskDone(_ task: TaskItem) {
-        Task { @MainActor in
+        // Toggle completion
+        Task {
             await TaskManager.shared.toggleComplete(task: task)
-            self.show(title: "Done!", subtitle: task.title, body: "Task marked as completed", duration: 3.0)
         }
+        // Show notification immediately (same as task reminder)
+        self.show(title: "Done!", subtitle: task.title, body: "Task marked as completed", duration: 5.0)
     }
     
     private func snoozeTask(_ task: TaskItem) {
