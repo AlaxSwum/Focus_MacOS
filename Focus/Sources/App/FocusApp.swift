@@ -3297,7 +3297,7 @@ class FloatingNotificationManager {
                 showCloseButton: true  // Always show X button
             )
 
-            self.showWindow(with: notificationView, height: 90, duration: duration)
+            self.showWindow(with: notificationView, height: 90, duration: duration, hasActions: false)
         }
     }
     
@@ -3331,11 +3331,11 @@ class FloatingNotificationManager {
                 showCloseButton: true
             )
 
-            self.showWindow(with: notificationView, height: 140, duration: 30.0)
+            self.showWindow(with: notificationView, height: 140, duration: 30.0, hasActions: true)
         }
     }
     
-    private func showWindow(with view: FloatingNotificationView, height: CGFloat, duration: TimeInterval) {
+    private func showWindow(with view: FloatingNotificationView, height: CGFloat, duration: TimeInterval, hasActions: Bool = false) {
         let windowWidth: CGFloat = 360
         let windowHeight: CGFloat = height
 
@@ -3395,18 +3395,21 @@ class FloatingNotificationManager {
         self.keepOnTopTimer?.invalidate()
         self.keepOnTopTimer = nil
         
-        // Add click monitor - clicking ON the notification will dismiss it
-        self.clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
-            guard let self = self, let panel = self.notificationPanel else { return event }
-            
-            // Check if click is within the panel
-            let clickLocation = NSEvent.mouseLocation
-            if panel.frame.contains(clickLocation) {
-                print("DEBUG: Click detected on notification panel - dismissing")
-                self.dismiss()
-                return nil // Consume the event
+        // Only add click-to-dismiss for notifications WITHOUT action buttons
+        // Task reminders have buttons (Done, Snooze, Skip) so don't auto-dismiss on click
+        if !hasActions {
+            self.clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
+                guard let self = self, let panel = self.notificationPanel else { return event }
+                
+                // Check if click is within the panel
+                let clickLocation = NSEvent.mouseLocation
+                if panel.frame.contains(clickLocation) {
+                    print("DEBUG: Click detected on notification panel - dismissing")
+                    self.dismiss()
+                    return nil // Consume the event
+                }
+                return event
             }
-            return event
         }
         
         // Auto-dismiss after duration
@@ -3459,12 +3462,12 @@ class FloatingNotificationManager {
     }
     
     private func markTaskDone(_ task: TaskItem) {
-        // Toggle completion
+        // Toggle completion - no notification needed
         Task {
             await TaskManager.shared.toggleComplete(task: task)
         }
-        // Show notification immediately (same as task reminder)
-        self.show(title: "Done!", subtitle: task.title, body: "Task marked as completed", duration: 5.0)
+        // Just dismiss the current notification, don't show completion notification
+        self.dismiss()
     }
     
     private func snoozeTask(_ task: TaskItem) {
