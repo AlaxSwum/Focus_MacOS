@@ -3391,11 +3391,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
     
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Hide instead of quit when Command+Q is pressed
-        // Return .terminateCancel to prevent quitting, but this can be frustrating
-        // Instead, let's just keep running - the menu bar extra keeps the app alive
-        print("App termination requested - app will continue running in menu bar")
-        return .terminateNow  // Allow termination but app stays in menu bar due to MenuBarExtra
+        // Prevent Command+Q from quitting - keep menu bar icon visible
+        // User can force quit via Activity Monitor or Option+Command+Q if needed
+        print("App termination cancelled - app stays in menu bar")
+        
+        // Hide all windows instead of quitting
+        for window in NSApp.windows {
+            window.orderOut(nil)
+        }
+        
+        return .terminateCancel  // Prevent quitting, keep menu bar icon
     }
     
     func startTaskMonitoring() {
