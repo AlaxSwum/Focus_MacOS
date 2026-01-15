@@ -3230,6 +3230,7 @@ class FloatingNotificationManager {
     private var taskMonitorTimer: Timer?
     private var notifiedTaskIds: Set<String> = []
     private var autoDismissWorkItem: DispatchWorkItem?
+    private var clickMonitor: Any?
     
     func startTaskMonitoring() {
         // Check every 30 seconds for upcoming tasks
@@ -3385,12 +3386,30 @@ class FloatingNotificationManager {
             panel.animator().alphaValue = 1
         }
         
-        // Cancel any existing auto-dismiss
+        // Cancel any existing monitors/timers
+        if let monitor = self.clickMonitor {
+            NSEvent.removeMonitor(monitor)
+            self.clickMonitor = nil
+        }
         self.autoDismissWorkItem?.cancel()
         self.keepOnTopTimer?.invalidate()
         self.keepOnTopTimer = nil
         
-        // Use a background thread to ensure the timer fires
+        // Add click monitor - clicking ON the notification will dismiss it
+        self.clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
+            guard let self = self, let panel = self.notificationPanel else { return event }
+            
+            // Check if click is within the panel
+            let clickLocation = NSEvent.mouseLocation
+            if panel.frame.contains(clickLocation) {
+                print("DEBUG: Click detected on notification panel - dismissing")
+                self.dismiss()
+                return nil // Consume the event
+            }
+            return event
+        }
+        
+        // Auto-dismiss after duration
         let manager = self
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + duration) {
             DispatchQueue.main.async {
@@ -3402,6 +3421,13 @@ class FloatingNotificationManager {
     
     func dismiss() {
         print("DEBUG: dismiss() called")
+        
+        // Remove click monitor
+        if let monitor = clickMonitor {
+            NSEvent.removeMonitor(monitor)
+            clickMonitor = nil
+        }
+        
         autoDismissWorkItem?.cancel()
         autoDismissWorkItem = nil
         keepOnTopTimer?.invalidate()
