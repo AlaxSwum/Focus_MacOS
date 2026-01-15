@@ -3389,17 +3389,14 @@ class FloatingNotificationManager {
         self.keepOnTopTimer?.invalidate()
         self.keepOnTopTimer = nil
         
-        // Create auto-dismiss work item
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
-            print("DEBUG: Auto-dismissing notification now")
-            self.dismiss()
+        // Use a background thread to ensure the timer fires
+        let manager = self
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + duration) {
+            DispatchQueue.main.async {
+                print("DEBUG: Auto-dismiss triggered after \(duration)s")
+                manager.dismiss()
+            }
         }
-        self.autoDismissWorkItem = workItem
-        
-        // Schedule auto-dismiss
-        print("DEBUG: Scheduling auto-dismiss in \(duration) seconds")
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: workItem)
     }
     
     func dismiss() {
