@@ -160,6 +160,8 @@ struct MenuBarDropdownView: View {
     @State private var selectedTab = 0
     @State private var todaySubTab = 0  // 0 = Upcoming, 1 = Completed
     @State private var selectedMeeting: TaskItem?
+    @State private var tabDirection: Int = 0  // -1 left, 1 right for animation
+    @Namespace private var tabAnimation
     
     var body: some View {
         ZStack {
@@ -171,12 +173,22 @@ struct MenuBarDropdownView: View {
                 footerView
             }
             .opacity(selectedMeeting == nil ? 1 : 0)
+            .scaleEffect(selectedMeeting == nil ? 1 : 0.95)
             
             // Meeting Details overlay (inline, not a sheet)
             if let meeting = selectedMeeting {
-                MeetingDetailsInline(meeting: meeting, onClose: { selectedMeeting = nil })
+                MeetingDetailsInline(meeting: meeting, onClose: { 
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        selectedMeeting = nil
+                    }
+                    // Send notification
+                    sendLocalNotification(title: "Meeting Closed", body: "Returned to main view")
+                })
                     .environmentObject(taskManager)
-                    .transition(.opacity)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                    ))
             }
         }
         .frame(width: 380, height: 500)
@@ -187,81 +199,162 @@ struct MenuBarDropdownView: View {
                     await taskManager.fetchTasks(for: userId)
                 }
             }
+            // Welcome notification
+            sendLocalNotification(title: "Project Next", body: "Ready to help you stay productive!")
         }
+    }
+    
+    // Send local notification helper
+    private func sendLocalNotification(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
     }
     
     private var headerView: some View {
         HStack(spacing: 10) {
-            // Project Next Logo
-            ProjectNextLogo(size: 24)
-            
-            Text("Project Next")
-                .font(.system(size: 15, weight: .semibold))
-            
+            // Project Next Logo with pulse animation
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.1))
+                    .frame(width: 32, height: 32)
+                ProjectNextLogo(size: 22)
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Project Next")
+                    .font(.system(size: 14, weight: .bold))
+                Text(Date(), style: .date)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
+
             Spacer()
-            
+
+            // Progress indicator with animation
             let progress = getProgress()
-            HStack(spacing: 6) {
-                ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
-                    .progressViewStyle(.linear)
-                    .frame(width: 50)
-                    .tint(progress.completed == progress.total ? .green : .accentColor)
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.secondary.opacity(0.2), lineWidth: 3)
+                        .frame(width: 28, height: 28)
+                    Circle()
+                        .trim(from: 0, to: CGFloat(progress.completed) / CGFloat(max(progress.total, 1)))
+                        .stroke(
+                            progress.completed == progress.total ? Color.green : Color.accentColor,
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+                        .frame(width: 28, height: 28)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.spring(response: 0.5), value: progress.completed)
+                    
+                    Text("\(progress.completed)")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(progress.completed == progress.total ? .green : .accentColor)
+                }
                 
-                Text("\(progress.completed)/\(progress.total)")
+                Text("/\(progress.total)")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(nsColor: NSColor.controlBackgroundColor))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            LinearGradient(
+                colors: [Color(nsColor: NSColor.controlBackgroundColor), Color(nsColor: NSColor.controlBackgroundColor).opacity(0.8)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
     }
     
     private var tabBar: some View {
         HStack(spacing: 4) {
-            tabButton("Today", icon: "sun.max", index: 0)
+            tabButton("Today", icon: "sun.max.fill", index: 0)
             tabButton("Todo", icon: "checklist", index: 1)
-            tabButton("Meetings", icon: "person.2", index: 2)
+            tabButton("Meetings", icon: "video.fill", index: 2)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.5))
     }
-    
+
     private func tabButton(_ title: String, icon: String, index: Int) -> some View {
         Button {
-            selectedTab = index
+            let oldTab = selectedTab
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                tabDirection = index > oldTab ? 1 : -1
+                selectedTab = index
+            }
+            // Haptic-like notification
+            let tabNames = ["Today", "Todo", "Meetings"]
+            sendLocalNotification(title: "Switched to \(tabNames[index])", body: "Viewing your \(tabNames[index].lowercased()) items")
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.system(size: 11))
+                    .font(.system(size: 11, weight: selectedTab == index ? .semibold : .regular))
+                    .symbolEffect(.bounce, value: selectedTab == index)
                 Text(title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 12, weight: selectedTab == index ? .semibold : .medium))
             }
             .foregroundColor(selectedTab == index ? .white : .secondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(selectedTab == index ? Color.accentColor : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(
+                ZStack {
+                    if selectedTab == index {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.accentColor, Color.accentColor.opacity(0.8)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .matchedGeometryEffect(id: "tabBackground", in: tabAnimation)
+                            .shadow(color: Color.accentColor.opacity(0.3), radius: 4, y: 2)
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
     }
-    
+
     private var contentView: some View {
         ScrollView {
             LazyVStack(spacing: 8) {
                 switch selectedTab {
                 case 0:
                     todayContent
+                        .transition(.asymmetric(
+                            insertion: .move(edge: tabDirection > 0 ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: tabDirection > 0 ? .leading : .trailing).combined(with: .opacity)
+                        ))
                 case 1:
                     todoContent
+                        .transition(.asymmetric(
+                            insertion: .move(edge: tabDirection > 0 ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: tabDirection > 0 ? .leading : .trailing).combined(with: .opacity)
+                        ))
                 case 2:
                     meetingsContent
+                        .transition(.asymmetric(
+                            insertion: .move(edge: tabDirection > 0 ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: tabDirection > 0 ? .leading : .trailing).combined(with: .opacity)
+                        ))
                 default:
                     todayContent
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: selectedTab)
         }
     }
     
@@ -456,45 +549,68 @@ struct MenuBarDropdownView: View {
                 let time2 = task2.endHour * 60 + task2.endMinute
                 return time1 < time2
             }
-            
+
             if todos.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "checklist")
-                        .font(.system(size: 36))
-                        .foregroundColor(.secondary.opacity(0.5))
-                    Text("No todo items")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
+                VStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.purple.opacity(0.1))
+                            .frame(width: 60, height: 60)
+                        Image(systemName: "checklist")
+                            .font(.system(size: 28))
+                            .foregroundColor(.purple.opacity(0.6))
+                    }
+                    VStack(spacing: 4) {
+                        Text("All clear!")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("No todo items yet")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.scale.combined(with: .opacity))
             } else {
                 ForEach(todos) { task in
                     taskRow(task)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .trailing).combined(with: .opacity)
+                        ))
                 }
             }
-            
+
             Spacer()
-            
-            // Add Todo Button at bottom
+
+            // Add Todo Button at bottom with gradient
             Button {
                 openAddTodoWindow()
+                sendLocalNotification(title: "Add Todo", body: "Create a new todo item")
             } label: {
-                HStack {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .bold))
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 14))
                     Text("Add Todo")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(Color.purple)
+                .padding(.vertical, 11)
+                .background(
+                    LinearGradient(
+                        colors: [Color.purple, Color.purple.opacity(0.8)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                .shadow(color: Color.purple.opacity(0.3), radius: 4, y: 2)
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
         }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: taskManager.todayTasks.count)
     }
     
     private func openAddTodoWindow() {
@@ -1169,130 +1285,241 @@ struct MeetingDetailsInline: View {
     let meeting: TaskItem
     let onClose: () -> Void
     @EnvironmentObject var taskManager: TaskManager
-    @State private var showMeetingNotes = false
+    @State private var animateIn = false
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
+            // Header with gradient
             HStack {
-                Button { 
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        onClose()
+                Button { onClose() } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.secondary.opacity(0.15))
+                            .frame(width: 28, height: 28)
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
                     }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
                 
                 Spacer()
                 
-                Text("Meeting Details")
-                    .font(.system(size: 14, weight: .bold))
+                HStack(spacing: 6) {
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.purple)
+                    Text("Meeting Details")
+                        .font(.system(size: 14, weight: .bold))
+                }
                 
                 Spacer()
                 
-                Color.clear.frame(width: 18, height: 18)
+                Color.clear.frame(width: 28, height: 28)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color(nsColor: NSColor.controlBackgroundColor))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                LinearGradient(
+                    colors: [Color.purple.opacity(0.1), Color.clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
             
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Meeting Title
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label("Meeting", systemImage: "video.fill")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.secondary)
-                        
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Meeting Title Card
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(meeting.title)
-                            .font(.system(size: 16, weight: .bold))
-                    }
-                    
-                    Divider()
-                    
-                    // Time & Date
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Label("Time", systemImage: "clock")
-                                .font(.system(size: 9, weight: .medium))
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.primary)
+                        
+                        // Status badge
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 6, height: 6)
+                            Text("Scheduled")
+                                .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(nsColor: NSColor.controlBackgroundColor))
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .scaleEffect(animateIn ? 1 : 0.9)
+                    .opacity(animateIn ? 1 : 0)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.05), value: animateIn)
+                    
+                    // Time & Date Cards
+                    HStack(spacing: 8) {
+                        // Time Card
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.orange)
+                                Text("TIME")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.secondary)
+                            }
                             Text(meeting.timeText)
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 13, weight: .semibold))
                         }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.orange.opacity(0.1))
+                        )
+                        .scaleEffect(animateIn ? 1 : 0.9)
+                        .opacity(animateIn ? 1 : 0)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.1), value: animateIn)
                         
-                        Spacer()
-                        
-                        VStack(alignment: .leading, spacing: 3) {
-                            Label("Date", systemImage: "calendar")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundColor(.secondary)
+                        // Date Card
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "calendar")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.blue)
+                                Text("DATE")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.secondary)
+                            }
                             Text(meeting.date, style: .date)
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 13, weight: .semibold))
                         }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.blue.opacity(0.1))
+                        )
+                        .scaleEffect(animateIn ? 1 : 0.9)
+                        .opacity(animateIn ? 1 : 0)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.15), value: animateIn)
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
                     
                     // Description
                     if let desc = meeting.description, !desc.isEmpty {
-                        Divider()
-                        VStack(alignment: .leading, spacing: 3) {
-                            Label("Description", systemImage: "text.alignleft")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "text.alignleft")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.green)
+                                Text("DESCRIPTION")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.secondary)
+                            }
                             Text(desc)
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
+                                .foregroundColor(.primary.opacity(0.9))
+                                .lineSpacing(3)
                         }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color(nsColor: NSColor.controlBackgroundColor))
+                        )
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                        .scaleEffect(animateIn ? 1 : 0.9)
+                        .opacity(animateIn ? 1 : 0)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.2), value: animateIn)
                     }
                     
-                    // Meeting Link
+                    // Join Meeting Button
                     if let link = meeting.meetingLink {
-                        Divider()
                         Button {
                             if let url = URL(string: link) {
                                 NSWorkspace.shared.open(url)
+                                sendNotification(title: "Joining Meeting", body: meeting.title)
                             }
                         } label: {
-                            HStack {
+                            HStack(spacing: 8) {
                                 Image(systemName: "video.fill")
+                                    .font(.system(size: 14))
                                 Text("Join Meeting")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(.system(size: 13, weight: .semibold))
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 11, weight: .bold))
                             }
                             .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                            .background(Color.blue)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(
+                                LinearGradient(
+                                    colors: [Color.blue, Color.blue.opacity(0.8)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .shadow(color: Color.blue.opacity(0.3), radius: 8, y: 4)
                         }
                         .buttonStyle(.plain)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 12)
+                        .scaleEffect(animateIn ? 1 : 0.9)
+                        .opacity(animateIn ? 1 : 0)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.25), value: animateIn)
                     }
+                    
+                    Spacer(minLength: 16)
                 }
-                .padding(12)
             }
             
             // Bottom button - Open Meeting Notes
             Button {
                 openMeetingNotesWindow()
             } label: {
-                HStack {
-                    Image(systemName: "doc.text")
+                HStack(spacing: 8) {
+                    Image(systemName: "doc.text.fill")
+                        .font(.system(size: 13))
                     Text("Open Meeting Notes")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 11, weight: .bold))
                 }
                 .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(Color.purple)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(
+                        colors: [Color.purple, Color.purple.opacity(0.8)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .shadow(color: Color.purple.opacity(0.3), radius: 6, y: 3)
             }
             .buttonStyle(.plain)
             .padding(12)
+            .scaleEffect(animateIn ? 1 : 0.95)
+            .opacity(animateIn ? 1 : 0)
+            .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.3), value: animateIn)
         }
         .background(Color(nsColor: NSColor.windowBackgroundColor))
+        .onAppear {
+            animateIn = true
+        }
     }
     
     private func openMeetingNotesWindow() {
+        sendNotification(title: "Opening Notes", body: "Loading meeting notes for \(meeting.title)")
+        
         let contentView = MeetingNotesView(meeting: meeting, onBack: {})
             .environmentObject(TaskManager.shared)
         
@@ -1304,6 +1531,15 @@ struct MeetingDetailsInline: View {
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+    
+    private func sendNotification(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
     }
 }
 
