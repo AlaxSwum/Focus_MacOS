@@ -450,11 +450,16 @@ struct MenuBarDropdownView: View {
     // Unified row style for both tasks and meetings
     private func unifiedTaskRow(_ task: TaskItem) -> some View {
         HStack(spacing: 10) {
-            // Checkbox
+            // Checkbox with larger hit area
             Button {
                 Task { await taskManager.toggleComplete(task: task) }
             } label: {
                 ZStack {
+                    // Invisible larger hit area
+                    Circle()
+                        .fill(Color.clear)
+                        .frame(width: 32, height: 32)
+                    
                     Circle()
                         .strokeBorder(task.isCompleted ? Color.green : taskColor(task).opacity(0.5), lineWidth: 2)
                         .frame(width: 20, height: 20)
@@ -468,8 +473,10 @@ struct MenuBarDropdownView: View {
                             .foregroundColor(.white)
                     }
                 }
+                .contentShape(Circle().size(width: 32, height: 32))
             }
             .buttonStyle(.plain)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: task.isCompleted)
             
             // Icon
             ZStack {
@@ -2743,34 +2750,31 @@ struct FullAppWindowView: View {
         VStack(spacing: 0) {
             headerBar
 
-            // Main content area
+            // Main content area with smooth transitions
             ZStack {
                 Color(nsColor: NSColor.windowBackgroundColor)
 
-                switch selectedTab {
-                case 0:
-                    FullCalendarView()
-                        .environmentObject(taskManager)
-                        .environmentObject(authManager)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: tabDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
-                            removal: .move(edge: tabDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
-                        ))
-                case 1:
-                    FullMeetingsView()
-                        .environmentObject(taskManager)
-                        .environmentObject(authManager)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: tabDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
-                            removal: .move(edge: tabDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
-                        ))
-                default:
-                    FullCalendarView()
-                        .environmentObject(taskManager)
-                        .environmentObject(authManager)
+                // Use id to force view recreation for smooth transition
+                Group {
+                    switch selectedTab {
+                    case 0:
+                        FullCalendarView()
+                            .environmentObject(taskManager)
+                            .environmentObject(authManager)
+                    case 1:
+                        FullMeetingsView()
+                            .environmentObject(taskManager)
+                            .environmentObject(authManager)
+                    default:
+                        FullCalendarView()
+                            .environmentObject(taskManager)
+                            .environmentObject(authManager)
+                    }
                 }
+                .id(selectedTab)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
-            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: selectedTab)
+            .animation(.easeInOut(duration: 0.3), value: selectedTab)
         }
         .frame(minWidth: 1200, minHeight: 800)
         .onAppear {
@@ -2882,10 +2886,12 @@ struct FullAppWindowView: View {
         )
     }
     
+    @State private var hoveredTab: Int? = nil
+    
     private func tabButton(_ title: String, icon: String, index: Int) -> some View {
         Button {
             let oldTab = selectedTab
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                 tabDirection = index > oldTab ? 1 : -1
                 selectedTab = index
             }
@@ -2893,19 +2899,33 @@ struct FullAppWindowView: View {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 12, weight: selectedTab == index ? .semibold : .regular))
+                    .symbolEffect(.bounce, value: selectedTab == index)
                 Text(title)
                     .font(.system(size: 13, weight: selectedTab == index ? .semibold : .medium))
             }
-            .foregroundColor(selectedTab == index ? .white : .secondary)
+            .foregroundColor(selectedTab == index ? .white : (hoveredTab == index ? .primary : .secondary))
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(selectedTab == index ? Color.accentColor : Color.clear)
+                ZStack {
+                    if selectedTab == index {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.accentColor)
+                    } else if hoveredTab == index {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.accentColor.opacity(0.1))
+                    }
+                }
             )
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            .scaleEffect(selectedTab == index ? 1.02 : (hoveredTab == index ? 1.01 : 1.0))
         }
         .buttonStyle(.plain)
+        .onHover { isHovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                hoveredTab = isHovering ? index : nil
+            }
+        }
     }
 
     private func getProgress() -> (completed: Int, total: Int) {
