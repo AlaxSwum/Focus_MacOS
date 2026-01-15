@@ -485,13 +485,22 @@ class TaskManager: ObservableObject {
     }
     
     private func updateTaskCompletion(task: TaskItem, completed: Bool) async {
-        guard task.originalType == "timeblock" else {
-            // For meetings/todos, just update local state
+        // Determine the correct table and endpoint based on task type
+        let tableName: String
+        switch task.originalType {
+        case "timeblock":
+            tableName = "time_blocks"
+        case "todo":
+            tableName = "todos"
+        case "meeting":
+            tableName = "meetings"
+        default:
+            print("Unknown task type: \(task.originalType), skipping database update")
             return
         }
         
         do {
-            let url = URL(string: "\(supabaseURL)/rest/v1/time_blocks?id=eq.\(task.originalId)")!
+            let url = URL(string: "\(supabaseURL)/rest/v1/\(tableName)?id=eq.\(task.originalId)")!
             var request = URLRequest(url: url)
             request.httpMethod = "PATCH"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -500,7 +509,12 @@ class TaskManager: ObservableObject {
             request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
             request.httpBody = try JSONEncoder().encode(["completed": completed])
             
-            _ = try await URLSession.shared.data(for: request)
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse {
+                if !(200...299).contains(httpResponse.statusCode) {
+                    print("Failed to update \(tableName): HTTP \(httpResponse.statusCode)")
+                }
+            }
         } catch {
             print("Failed to update task: \(error)")
         }
