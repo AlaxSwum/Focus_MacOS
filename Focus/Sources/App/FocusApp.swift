@@ -83,10 +83,10 @@ struct FocusApp: App {
 // MARK: - Menu Bar Icon View
 #if os(macOS)
 struct MenuBarIconView: View {
-    private static let logoPath = "/Users/swumpyaesone/Documents/project_management/frontend/assets/logo/projectnextlogo.png"
-    
     private static func createIcon() -> NSImage? {
-        guard let original = NSImage(contentsOfFile: logoPath) else { return nil }
+        // Load from bundle
+        guard let original = Bundle.main.image(forResource: "AppLogo") ?? 
+                            Bundle.main.image(forResource: "MenuBarIcon") else { return nil }
         let newSize = NSSize(width: 18, height: 18)
         let newImage = NSImage(size: newSize)
         newImage.lockFocus()
@@ -110,16 +110,13 @@ struct MenuBarIconView: View {
     }
 }
 
-// Project Next Logo - loads from your actual PNG file
+// Project Next Logo - loads from app bundle
 struct ProjectNextLogo: View {
     var size: CGFloat = 24
     
-    // Path to your actual logo file
-    private static let logoPath = "/Users/swumpyaesone/Documents/project_management/frontend/assets/logo/projectnextlogo.png"
-    
     var body: some View {
         Group {
-            if let nsImage = NSImage(contentsOfFile: Self.logoPath) {
+            if let nsImage = Bundle.main.image(forResource: "AppLogo") {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -2644,8 +2641,6 @@ struct FullAppWindowView: View {
     @State private var selectedTab = 0
     @State private var tabDirection: Int = 0
 
-    private static let logoPath = "/Users/swumpyaesone/Documents/project_management/frontend/assets/logo/projectnextlogo.png"
-
     var body: some View {
         ZStack {
             Color(nsColor: NSColor.windowBackgroundColor)
@@ -2701,7 +2696,7 @@ struct FullAppWindowView: View {
             HStack(spacing: 16) {
                 // Logo
                 HStack(spacing: 8) {
-                    if let nsImage = NSImage(contentsOfFile: Self.logoPath) {
+                    if let nsImage = Bundle.main.image(forResource: "AppLogo") {
                         Image(nsImage: nsImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
@@ -2866,12 +2861,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private var monitorTimer: Timer?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Set app icon from file
-        let iconPath = "/Users/swumpyaesone/Documents/project_management/frontend/assets/logo/projectnextlogo.png"
-        if let iconImage = NSImage(contentsOfFile: iconPath) {
+        // Set app icon from bundle
+        if let iconImage = Bundle.main.image(forResource: "AppLogo") {
             NSApp.applicationIconImage = iconImage
         }
-        
+
         // Set up notification delegate
         UNUserNotificationCenter.current().delegate = self
 
