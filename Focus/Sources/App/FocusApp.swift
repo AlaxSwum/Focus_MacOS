@@ -3229,6 +3229,7 @@ class FloatingNotificationManager {
     private var keepOnTopTimer: Timer?
     private var taskMonitorTimer: Timer?
     private var notifiedTaskIds: Set<String> = []
+    private var autoDismissWorkItem: DispatchWorkItem?
     
     func startTaskMonitoring() {
         // Check every 30 seconds for upcoming tasks
@@ -3383,22 +3384,35 @@ class FloatingNotificationManager {
             panel.animator().alphaValue = 1
         }
         
-        // Keep panel on top for a limited time
+        // Cancel any existing auto-dismiss
+        self.autoDismissWorkItem?.cancel()
         self.keepOnTopTimer?.invalidate()
         self.keepOnTopTimer = nil
         
-        // Auto-dismiss using DispatchQueue (more reliable than Timer)
-        let dismissDuration = duration
-        DispatchQueue.main.asyncAfter(deadline: .now() + dismissDuration) { [weak self] in
-            self?.dismiss()
+        // Create auto-dismiss work item
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            print("DEBUG: Auto-dismissing notification now")
+            self.dismiss()
         }
+        self.autoDismissWorkItem = workItem
+        
+        // Schedule auto-dismiss
+        print("DEBUG: Scheduling auto-dismiss in \(duration) seconds")
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: workItem)
     }
     
     func dismiss() {
+        print("DEBUG: dismiss() called")
+        autoDismissWorkItem?.cancel()
+        autoDismissWorkItem = nil
         keepOnTopTimer?.invalidate()
         keepOnTopTimer = nil
         
-        guard let panel = notificationPanel else { return }
+        guard let panel = notificationPanel else { 
+            print("DEBUG: No panel to dismiss")
+            return 
+        }
         
         guard let screen = NSScreen.main else {
             panel.orderOut(nil)
