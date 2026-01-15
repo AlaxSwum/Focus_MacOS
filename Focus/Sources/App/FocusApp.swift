@@ -161,8 +161,6 @@ struct MenuBarDropdownView: View {
     @State private var todaySubTab = 0  // 0 = Upcoming, 1 = Completed
     @State private var selectedMeeting: TaskItem?
     @State private var tabDirection: Int = 0
-    @State private var isAppearing = false
-    @Namespace private var tabAnimation
     
     var body: some View {
         ZStack {
@@ -174,31 +172,21 @@ struct MenuBarDropdownView: View {
                 footerView
             }
             .opacity(selectedMeeting == nil ? 1 : 0)
-            .scaleEffect(selectedMeeting == nil ? 1 : 0.95)
-            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: selectedMeeting == nil)
             
             // Meeting Details overlay
             if let meeting = selectedMeeting {
                 MeetingDetailsInline(meeting: meeting, onClose: { 
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    withAnimation(.easeInOut(duration: 0.25)) {
                         selectedMeeting = nil
                     }
                 })
                     .environmentObject(taskManager)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
-                    ))
+                    .transition(.opacity)
             }
         }
         .frame(width: 380, height: 500)
         .background(Color(nsColor: NSColor.windowBackgroundColor))
-        .scaleEffect(isAppearing ? 1 : 0.95)
-        .opacity(isAppearing ? 1 : 0)
         .onAppear {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                isAppearing = true
-            }
             if let userId = authManager.currentUser?.id {
                 Task {
                     await taskManager.fetchTasks(for: userId)
@@ -279,7 +267,7 @@ struct MenuBarDropdownView: View {
     private func tabButton(_ title: String, icon: String, index: Int) -> some View {
         Button {
             let oldTab = selectedTab
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 tabDirection = index > oldTab ? 1 : -1
                 selectedTab = index
             }
@@ -287,7 +275,6 @@ struct MenuBarDropdownView: View {
             HStack(spacing: 5) {
                 Image(systemName: icon)
                     .font(.system(size: 11, weight: selectedTab == index ? .semibold : .regular))
-                    .symbolEffect(.bounce, value: selectedTab == index)
                 Text(title)
                     .font(.system(size: 12, weight: selectedTab == index ? .semibold : .medium))
             }
@@ -295,20 +282,8 @@ struct MenuBarDropdownView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
             .background(
-                ZStack {
-                    if selectedTab == index {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color.accentColor, Color.accentColor.opacity(0.8)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .matchedGeometryEffect(id: "tabBackground", in: tabAnimation)
-                            .shadow(color: Color.accentColor.opacity(0.3), radius: 4, y: 2)
-                    }
-                }
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(selectedTab == index ? Color.accentColor : Color.clear)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
@@ -321,30 +296,18 @@ struct MenuBarDropdownView: View {
                 switch selectedTab {
                 case 0:
                     todayContent
-                        .transition(.asymmetric(
-                            insertion: .move(edge: tabDirection > 0 ? .trailing : .leading).combined(with: .opacity),
-                            removal: .move(edge: tabDirection > 0 ? .leading : .trailing).combined(with: .opacity)
-                        ))
                 case 1:
                     todoContent
-                        .transition(.asymmetric(
-                            insertion: .move(edge: tabDirection > 0 ? .trailing : .leading).combined(with: .opacity),
-                            removal: .move(edge: tabDirection > 0 ? .leading : .trailing).combined(with: .opacity)
-                        ))
                 case 2:
                     meetingsContent
-                        .transition(.asymmetric(
-                            insertion: .move(edge: tabDirection > 0 ? .trailing : .leading).combined(with: .opacity),
-                            removal: .move(edge: tabDirection > 0 ? .leading : .trailing).combined(with: .opacity)
-                        ))
                 default:
                     todayContent
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: selectedTab)
         }
+        .animation(.easeInOut(duration: 0.2), value: selectedTab)
     }
     
     // Filter to today only - sorted by time
@@ -1273,7 +1236,6 @@ struct MeetingDetailsInline: View {
     let meeting: TaskItem
     let onClose: () -> Void
     @EnvironmentObject var taskManager: TaskManager
-    @State private var animateIn = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -1341,9 +1303,6 @@ struct MeetingDetailsInline: View {
                     )
                     .padding(.horizontal, 12)
                     .padding(.top, 8)
-                    .scaleEffect(animateIn ? 1 : 0.9)
-                    .opacity(animateIn ? 1 : 0)
-                    .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.05), value: animateIn)
                     
                     // Time & Date Cards
                     HStack(spacing: 8) {
@@ -1366,9 +1325,6 @@ struct MeetingDetailsInline: View {
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(Color.orange.opacity(0.1))
                         )
-                        .scaleEffect(animateIn ? 1 : 0.9)
-                        .opacity(animateIn ? 1 : 0)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.1), value: animateIn)
                         
                         // Date Card
                         VStack(alignment: .leading, spacing: 6) {
@@ -1389,9 +1345,6 @@ struct MeetingDetailsInline: View {
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(Color.blue.opacity(0.1))
                         )
-                        .scaleEffect(animateIn ? 1 : 0.9)
-                        .opacity(animateIn ? 1 : 0)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.15), value: animateIn)
                     }
                     .padding(.horizontal, 12)
                     .padding(.top, 8)
@@ -1420,9 +1373,6 @@ struct MeetingDetailsInline: View {
                         )
                         .padding(.horizontal, 12)
                         .padding(.top, 8)
-                        .scaleEffect(animateIn ? 1 : 0.9)
-                        .opacity(animateIn ? 1 : 0)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.2), value: animateIn)
                     }
                     
                     // Join Meeting Button
@@ -1457,9 +1407,6 @@ struct MeetingDetailsInline: View {
                         .buttonStyle(.plain)
                         .padding(.horizontal, 12)
                         .padding(.top, 12)
-                        .scaleEffect(animateIn ? 1 : 0.9)
-                        .opacity(animateIn ? 1 : 0)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.25), value: animateIn)
                     }
                     
                     Spacer(minLength: 16)
@@ -1494,14 +1441,8 @@ struct MeetingDetailsInline: View {
             }
             .buttonStyle(.plain)
             .padding(12)
-            .scaleEffect(animateIn ? 1 : 0.95)
-            .opacity(animateIn ? 1 : 0)
-            .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.3), value: animateIn)
         }
         .background(Color(nsColor: NSColor.windowBackgroundColor))
-        .onAppear {
-            animateIn = true
-        }
     }
     
     private func openMeetingNotesWindow() {
@@ -2701,9 +2642,7 @@ struct FullAppWindowView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var taskManager: TaskManager
     @State private var selectedTab = 0
-    @State private var isAppearing = false
     @State private var tabDirection: Int = 0
-    @Namespace private var fullAppAnimation
 
     private static let logoPath = "/Users/swumpyaesone/Documents/project_management/frontend/assets/logo/projectnextlogo.png"
 
@@ -2714,18 +2653,9 @@ struct FullAppWindowView: View {
 
             if authManager.isAuthenticated {
                 mainContent
-                    .opacity(isAppearing ? 1 : 0)
-                    .scaleEffect(isAppearing ? 1 : 0.98)
             } else {
                 LoginView()
                     .environmentObject(authManager)
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-            }
-        }
-        .animation(.spring(response: 0.5, dampingFraction: 0.85), value: authManager.isAuthenticated)
-        .onAppear {
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                isAppearing = true
             }
         }
     }
@@ -2733,9 +2663,8 @@ struct FullAppWindowView: View {
     private var mainContent: some View {
         VStack(spacing: 0) {
             headerBar
-                .transition(.move(edge: .top).combined(with: .opacity))
 
-            // Main content area with smooth transitions
+            // Main content area
             ZStack {
                 Color(nsColor: NSColor.windowBackgroundColor)
 
@@ -2744,25 +2673,17 @@ struct FullAppWindowView: View {
                     FullCalendarView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: tabDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
-                            removal: .move(edge: tabDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
-                        ))
                 case 1:
                     FullMeetingsView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: tabDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
-                            removal: .move(edge: tabDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
-                        ))
                 default:
                     FullCalendarView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
                 }
             }
-            .animation(.spring(response: 0.45, dampingFraction: 0.85), value: selectedTab)
+            .animation(.easeInOut(duration: 0.25), value: selectedTab)
         }
         .frame(minWidth: 1200, minHeight: 800)
         .onAppear {
@@ -2877,7 +2798,7 @@ struct FullAppWindowView: View {
     private func tabButton(_ title: String, icon: String, index: Int) -> some View {
         Button {
             let oldTab = selectedTab
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 tabDirection = index > oldTab ? 1 : -1
                 selectedTab = index
             }
@@ -2885,7 +2806,6 @@ struct FullAppWindowView: View {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 12, weight: selectedTab == index ? .semibold : .regular))
-                    .symbolEffect(.bounce, value: selectedTab == index)
                 Text(title)
                     .font(.system(size: 13, weight: selectedTab == index ? .semibold : .medium))
             }
@@ -2893,20 +2813,8 @@ struct FullAppWindowView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
             .background(
-                ZStack {
-                    if selectedTab == index {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color.accentColor, Color.accentColor.opacity(0.85)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .matchedGeometryEffect(id: "fullAppTab", in: fullAppAnimation)
-                            .shadow(color: Color.accentColor.opacity(0.25), radius: 4, y: 2)
-                    }
-                }
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(selectedTab == index ? Color.accentColor : Color.clear)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
