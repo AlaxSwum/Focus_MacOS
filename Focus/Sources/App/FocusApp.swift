@@ -123,6 +123,82 @@ func loadAppLogo() -> NSImage? {
     return nil
 }
 
+// MARK: - Animated Checkbox
+struct AnimatedCheckbox: View {
+    let isCompleted: Bool
+    let action: () -> Void
+    
+    @State private var scale: CGFloat = 1.0
+    @State private var rotation: Double = 0
+    @State private var showParticles = false
+    
+    var body: some View {
+        Button(action: {
+            // Trigger animation
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                scale = 1.3
+            }
+            
+            // Show particles if completing
+            if !isCompleted {
+                showParticles = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    showParticles = false
+                }
+            }
+            
+            // Reset scale
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                    scale = 1.0
+                }
+            }
+            
+            action()
+        }) {
+            ZStack {
+                // Background circle
+                Circle()
+                    .strokeBorder(isCompleted ? Color.green : Color.gray.opacity(0.4), lineWidth: 2)
+                    .frame(width: 22, height: 22)
+                
+                // Filled circle when completed
+                if isCompleted {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 22, height: 22)
+                        .transition(.scale.combined(with: .opacity))
+                    
+                    // Checkmark
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white)
+                        .transition(.scale.combined(with: .opacity))
+                }
+                
+                // Celebration particles
+                if showParticles {
+                    ForEach(0..<8, id: \.self) { i in
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 4, height: 4)
+                            .offset(
+                                x: showParticles ? cos(Double(i) * .pi / 4) * 20 : 0,
+                                y: showParticles ? sin(Double(i) * .pi / 4) * 20 : 0
+                            )
+                            .opacity(showParticles ? 0 : 1)
+                            .animation(.easeOut(duration: 0.4).delay(Double(i) * 0.02), value: showParticles)
+                    }
+                }
+            }
+            .scaleEffect(scale)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.35, dampingFraction: 0.6), value: isCompleted)
+    }
+}
+
 struct MenuBarIconView: View {
     private static func loadLogo() -> NSImage? {
         return loadAppLogo()
@@ -450,33 +526,11 @@ struct MenuBarDropdownView: View {
     // Unified row style for both tasks and meetings
     private func unifiedTaskRow(_ task: TaskItem) -> some View {
         HStack(spacing: 10) {
-            // Checkbox with larger hit area
-            Button {
+            // Animated Checkbox
+            AnimatedCheckbox(isCompleted: task.isCompleted) {
                 Task { await taskManager.toggleComplete(task: task) }
-            } label: {
-                ZStack {
-                    // Invisible larger hit area
-                    Circle()
-                        .fill(Color.clear)
-                        .frame(width: 32, height: 32)
-                    
-                    Circle()
-                        .strokeBorder(task.isCompleted ? Color.green : taskColor(task).opacity(0.5), lineWidth: 2)
-                        .frame(width: 20, height: 20)
-                    
-                    if task.isCompleted {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 20, height: 20)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                }
-                .contentShape(Circle().size(width: 32, height: 32))
             }
-            .buttonStyle(.plain)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: task.isCompleted)
+            .frame(width: 32, height: 32)
             
             // Icon
             ZStack {
@@ -846,29 +900,12 @@ struct TaskRowWithSwipe: View {
             
             // Main content
             HStack(spacing: 10) {
-                Button {
+                AnimatedCheckbox(isCompleted: taskItem.isCompleted) {
                     Task {
                         await taskManager.toggleComplete(task: taskItem)
                     }
-                } label: {
-                    ZStack {
-                        Circle()
-                            .strokeBorder(taskItem.isCompleted ? Color.green : Color.gray.opacity(0.4), lineWidth: 2)
-                            .frame(width: 22, height: 22)
-                        
-                        if taskItem.isCompleted {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 22, height: 22)
-                            
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: taskItem.isCompleted)
                 }
-                .buttonStyle(.plain)
+                .frame(width: 28, height: 28)
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(taskItem.title)
