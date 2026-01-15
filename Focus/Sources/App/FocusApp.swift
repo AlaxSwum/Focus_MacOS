@@ -3364,11 +3364,12 @@ class FloatingNotificationManager {
         panel.level = .popUpMenu // High level that appears above most windows
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hasShadow = true
-        panel.isMovableByWindowBackground = true
+        panel.isMovableByWindowBackground = false  // Disable so clicks work
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
         panel.alphaValue = 0
         panel.isFloatingPanel = true
+        panel.acceptsMouseMovedEvents = true
         
         // Store reference
         self.notificationPanel = panel
@@ -3479,7 +3480,7 @@ struct CloseButton: NSViewRepresentable {
 class ClickableCloseButton: NSView {
     private let onDismiss: () -> Void
     private var isHovering = false
-    private var imageView: NSImageView!
+    private var button: NSButton!
     
     init(onDismiss: @escaping () -> Void) {
         self.onDismiss = onDismiss
@@ -3492,13 +3493,21 @@ class ClickableCloseButton: NSView {
     }
     
     private func setupView() {
-        imageView = NSImageView(frame: bounds)
-        imageView.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Close")
-        imageView.contentTintColor = NSColor.secondaryLabelColor
-        imageView.imageScaling = .scaleProportionallyUpOrDown
-        addSubview(imageView)
+        // Use NSButton which handles clicks better
+        button = NSButton(frame: bounds)
+        button.bezelStyle = .regularSquare
+        button.isBordered = false
+        button.title = ""
+        button.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Close")
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyUpOrDown
+        button.contentTintColor = NSColor.secondaryLabelColor
+        button.target = self
+        button.action = #selector(buttonClicked)
+        button.focusRingType = .none
+        addSubview(button)
         
-        // Add tracking area
+        // Add tracking area for hover
         let trackingArea = NSTrackingArea(
             rect: bounds,
             options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
@@ -3508,19 +3517,28 @@ class ClickableCloseButton: NSView {
         addTrackingArea(trackingArea)
     }
     
+    @objc private func buttonClicked() {
+        print("DEBUG: Close button clicked!")
+        onDismiss()
+    }
+    
     override func mouseDown(with event: NSEvent) {
+        print("DEBUG: mouseDown on close button view")
         onDismiss()
     }
     
     override func mouseEntered(with event: NSEvent) {
         isHovering = true
-        imageView.contentTintColor = NSColor.labelColor
+        button.contentTintColor = NSColor.labelColor
     }
     
     override func mouseExited(with event: NSEvent) {
         isHovering = false
-        imageView.contentTintColor = NSColor.secondaryLabelColor
+        button.contentTintColor = NSColor.secondaryLabelColor
     }
+    
+    override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 struct FloatingNotificationView: View {
