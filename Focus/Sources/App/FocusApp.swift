@@ -82,11 +82,54 @@ struct FocusApp: App {
 
 // MARK: - Menu Bar Icon View
 #if os(macOS)
+
+// Global logo loader function
+func loadAppLogo() -> NSImage? {
+    // Try multiple loading methods
+    let names = ["AppLogo", "MenuBarIcon", "logo", "projectnextlogo"]
+    
+    // Method 1: Bundle.main.image
+    for name in names {
+        if let img = Bundle.main.image(forResource: name) {
+            return img
+        }
+    }
+    
+    // Method 2: From Resources folder in bundle (nested structure)
+    if let resourcePath = Bundle.main.resourcePath {
+        let paths = [
+            // Nested Resources folder (common with Xcode copy phase)
+            "\(resourcePath)/Resources/AppLogo.png",
+            "\(resourcePath)/Resources/MenuBarIcon.png",
+            "\(resourcePath)/Resources/projectnextlogo.png",
+            "\(resourcePath)/Resources/logo.png",
+            // Direct in Resources
+            "\(resourcePath)/AppLogo.png",
+            "\(resourcePath)/projectnextlogo.png",
+            "\(resourcePath)/logo.png"
+        ]
+        for path in paths {
+            if let img = NSImage(contentsOfFile: path) {
+                return img
+            }
+        }
+    }
+    
+    // Method 3: Named image from asset catalog
+    if let img = NSImage(named: "AppIcon") {
+        return img
+    }
+    
+    return nil
+}
+
 struct MenuBarIconView: View {
+    private static func loadLogo() -> NSImage? {
+        return loadAppLogo()
+    }
+    
     private static func createIcon() -> NSImage? {
-        // Load from bundle
-        guard let original = Bundle.main.image(forResource: "AppLogo") ?? 
-                            Bundle.main.image(forResource: "MenuBarIcon") else { return nil }
+        guard let original = loadLogo() else { return nil }
         let newSize = NSSize(width: 18, height: 18)
         let newImage = NSImage(size: newSize)
         newImage.lockFocus()
@@ -113,14 +156,21 @@ struct MenuBarIconView: View {
 // Project Next Logo - loads from app bundle
 struct ProjectNextLogo: View {
     var size: CGFloat = 24
+    @State private var isAnimating = false
     
     var body: some View {
         Group {
-            if let nsImage = Bundle.main.image(forResource: "AppLogo") {
+            if let nsImage = loadAppLogo() {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: size, height: size)
+                    .scaleEffect(isAnimating ? 1.0 : 0.95)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+                            isAnimating = true
+                        }
+                    }
             } else {
                 // Fallback if file not found
                 fallbackLogo
@@ -264,7 +314,7 @@ struct MenuBarDropdownView: View {
     private func tabButton(_ title: String, icon: String, index: Int) -> some View {
         Button {
             let oldTab = selectedTab
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                 tabDirection = index > oldTab ? 1 : -1
                 selectedTab = index
             }
@@ -272,6 +322,7 @@ struct MenuBarDropdownView: View {
             HStack(spacing: 5) {
                 Image(systemName: icon)
                     .font(.system(size: 11, weight: selectedTab == index ? .semibold : .regular))
+                    .symbolEffect(.bounce, value: selectedTab == index)
                 Text(title)
                     .font(.system(size: 12, weight: selectedTab == index ? .semibold : .medium))
             }
@@ -281,8 +332,11 @@ struct MenuBarDropdownView: View {
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(selectedTab == index ? Color.accentColor : Color.clear)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedTab == index)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            .scaleEffect(selectedTab == index ? 1.02 : 1.0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: selectedTab == index)
         }
         .buttonStyle(.plain)
     }
@@ -293,10 +347,22 @@ struct MenuBarDropdownView: View {
                 switch selectedTab {
                 case 0:
                     todayContent
+                        .transition(.asymmetric(
+                            insertion: .move(edge: tabDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: tabDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
+                        ))
                 case 1:
                     todoContent
+                        .transition(.asymmetric(
+                            insertion: .move(edge: tabDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: tabDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
+                        ))
                 case 2:
                     meetingsContent
+                        .transition(.asymmetric(
+                            insertion: .move(edge: tabDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: tabDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
+                        ))
                 default:
                     todayContent
                 }
@@ -304,7 +370,7 @@ struct MenuBarDropdownView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
-        .animation(.easeInOut(duration: 0.2), value: selectedTab)
+        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: selectedTab)
     }
     
     // Filter to today only - sorted by time
@@ -674,27 +740,43 @@ struct MenuBarDropdownView: View {
         .buttonStyle(.plain)
     }
     
+    @State private var isHoveringFooter = false
+    
     private var footerView: some View {
         Button {
-            openFullAppWindow()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                openFullAppWindow()
+            }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "macwindow")
                     .font(.system(size: 12))
+                    .rotationEffect(.degrees(isHoveringFooter ? 5 : 0))
                 Text("Open Full App")
                     .font(.system(size: 12, weight: .medium))
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .opacity(isHoveringFooter ? 1 : 0)
+                    .offset(x: isHoveringFooter ? 0 : -5)
             }
-            .foregroundColor(.secondary)
+            .foregroundColor(isHoveringFooter ? .accentColor : .secondary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .background(Color(nsColor: NSColor.controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHoveringFooter ? Color.accentColor.opacity(0.1) : Color(nsColor: NSColor.controlBackgroundColor))
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color(nsColor: NSColor.separatorColor), lineWidth: 0.5)
+                    .stroke(isHoveringFooter ? Color.accentColor.opacity(0.3) : Color(nsColor: NSColor.separatorColor), lineWidth: isHoveringFooter ? 1 : 0.5)
             )
+            .scaleEffect(isHoveringFooter ? 1.02 : 1.0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHoveringFooter)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            isHoveringFooter = hovering
+        }
         .padding(.horizontal, 12)
         .padding(.bottom, 10)
     }
@@ -2640,6 +2722,7 @@ struct FullAppWindowView: View {
     @EnvironmentObject var taskManager: TaskManager
     @State private var selectedTab = 0
     @State private var tabDirection: Int = 0
+    @State private var isAppearing = false
 
     var body: some View {
         ZStack {
@@ -2648,9 +2731,17 @@ struct FullAppWindowView: View {
 
             if authManager.isAuthenticated {
                 mainContent
+                    .opacity(isAppearing ? 1 : 0)
+                    .scaleEffect(isAppearing ? 1 : 0.95)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: isAppearing)
             } else {
                 LoginView()
                     .environmentObject(authManager)
+            }
+        }
+        .onAppear {
+            withAnimation {
+                isAppearing = true
             }
         }
     }
@@ -2668,17 +2759,25 @@ struct FullAppWindowView: View {
                     FullCalendarView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: tabDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: tabDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
+                        ))
                 case 1:
                     FullMeetingsView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: tabDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: tabDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
+                        ))
                 default:
                     FullCalendarView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
                 }
             }
-            .animation(.easeInOut(duration: 0.25), value: selectedTab)
+            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: selectedTab)
         }
         .frame(minWidth: 1200, minHeight: 800)
         .onAppear {
@@ -2689,14 +2788,14 @@ struct FullAppWindowView: View {
             }
         }
     }
-
+    
     private var headerBar: some View {
         HStack(spacing: 0) {
             // Left section - Logo and progress
             HStack(spacing: 16) {
                 // Logo
                 HStack(spacing: 8) {
-                    if let nsImage = Bundle.main.image(forResource: "AppLogo") {
+                    if let nsImage = loadAppLogo() {
                         Image(nsImage: nsImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
