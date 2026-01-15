@@ -128,96 +128,118 @@ struct AnimatedCheckbox: View {
     let isCompleted: Bool
     let action: () -> Void
     
-    @State private var checkProgress: CGFloat = 0
+    @State private var isAnimating = false
+    @State private var showCheck = false
     @State private var circleScale: CGFloat = 1.0
-    @State private var fillOpacity: CGFloat = 0
-    @State private var showRipple = false
+    @State private var checkScale: CGFloat = 0
+    @State private var rippleScale: CGFloat = 1.0
+    @State private var rippleOpacity: CGFloat = 0
     
     var body: some View {
         Button(action: {
+            guard !isAnimating else { return }
+            
             if !isCompleted {
-                // Completing task - animate the check drawing
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    circleScale = 0.9
+                // COMPLETING - Play full animation
+                isAnimating = true
+                
+                // Step 1: Shrink circle
+                withAnimation(.easeIn(duration: 0.1)) {
+                    circleScale = 0.85
                 }
                 
+                // Step 2: Bounce back and show green fill + checkmark
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
-                        circleScale = 1.1
-                        fillOpacity = 1
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
+                        circleScale = 1.15
+                        showCheck = true
+                        checkScale = 1.2
                     }
                 }
                 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        checkProgress = 1
-                    }
-                }
-                
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                // Step 3: Settle to normal size
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
                         circleScale = 1.0
+                        checkScale = 1.0
                     }
-                    showRipple = true
+                    
+                    // Ripple effect
+                    rippleOpacity = 0.6
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        rippleScale = 2.0
+                        rippleOpacity = 0
+                    }
                 }
                 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                    showRipple = false
+                // Step 4: Call the action after animation
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    action()
+                }
+                
+                // Reset animation lock
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    isAnimating = false
+                    rippleScale = 1.0
                 }
             } else {
-                // Uncompleting - reverse animation
+                // UNCOMPLETING - Quick reverse
                 withAnimation(.easeOut(duration: 0.2)) {
-                    checkProgress = 0
-                    fillOpacity = 0
+                    showCheck = false
+                    checkScale = 0
                 }
+                action()
             }
-            
-            action()
         }) {
             ZStack {
-                // Ripple effect
-                if showRipple {
-                    Circle()
-                        .stroke(Color.green.opacity(0.5), lineWidth: 2)
-                        .frame(width: 22, height: 22)
-                        .scaleEffect(showRipple ? 2 : 1)
-                        .opacity(showRipple ? 0 : 1)
-                        .animation(.easeOut(duration: 0.5), value: showRipple)
-                }
-                
-                // Background circle
+                // Ripple effect circle
                 Circle()
-                    .strokeBorder(
-                        isCompleted ? Color.green : Color.gray.opacity(0.4),
-                        lineWidth: 2
-                    )
+                    .stroke(Color.green, lineWidth: 2)
                     .frame(width: 22, height: 22)
+                    .scaleEffect(rippleScale)
+                    .opacity(rippleOpacity)
                 
-                // Filled circle when completed
+                // Background circle (gray when unchecked)
+                Circle()
+                    .strokeBorder(Color.gray.opacity(0.4), lineWidth: 2)
+                    .frame(width: 22, height: 22)
+                    .opacity(showCheck || isCompleted ? 0 : 1)
+                
+                // Green filled circle (shown when checked)
                 Circle()
                     .fill(Color.green)
                     .frame(width: 22, height: 22)
-                    .opacity(isCompleted ? 1 : fillOpacity)
+                    .opacity(showCheck || isCompleted ? 1 : 0)
                 
-                // Animated checkmark path
-                if isCompleted || checkProgress > 0 {
-                    CheckmarkShape()
-                        .trim(from: 0, to: isCompleted ? 1 : checkProgress)
-                        .stroke(Color.white, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                        .frame(width: 10, height: 8)
-                }
+                // Green border when checked
+                Circle()
+                    .strokeBorder(Color.green, lineWidth: 2)
+                    .frame(width: 22, height: 22)
+                    .opacity(showCheck || isCompleted ? 1 : 0)
+                
+                // Checkmark
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
+                    .scaleEffect(showCheck || isCompleted ? (isAnimating ? checkScale : 1.0) : 0)
+                    .opacity(showCheck || isCompleted ? 1 : 0)
             }
             .scaleEffect(circleScale)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .onAppear {
+            // Sync initial state
+            if isCompleted {
+                showCheck = true
+                checkScale = 1.0
+            }
+        }
         .onChange(of: isCompleted) { oldValue, newValue in
-            if newValue {
-                checkProgress = 1
-                fillOpacity = 1
-            } else {
-                checkProgress = 0
-                fillOpacity = 0
+            // Sync when external state changes
+            if !isAnimating {
+                showCheck = newValue
+                checkScale = newValue ? 1.0 : 0
             }
         }
     }
