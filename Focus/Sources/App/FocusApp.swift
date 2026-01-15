@@ -3456,6 +3456,65 @@ class FloatingNotificationManager {
 }
 
 // MARK: - Floating Notification View with Actions
+// Close button that works in non-activating panels
+struct CloseButton: NSViewRepresentable {
+    let onDismiss: () -> Void
+    
+    func makeNSView(context: Context) -> ClickableCloseButton {
+        let button = ClickableCloseButton(onDismiss: onDismiss)
+        return button
+    }
+    
+    func updateNSView(_ nsView: ClickableCloseButton, context: Context) {}
+}
+
+class ClickableCloseButton: NSView {
+    private let onDismiss: () -> Void
+    private var isHovering = false
+    private var imageView: NSImageView!
+    
+    init(onDismiss: @escaping () -> Void) {
+        self.onDismiss = onDismiss
+        super.init(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
+        setupView()
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    private func setupView() {
+        imageView = NSImageView(frame: bounds)
+        imageView.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Close")
+        imageView.contentTintColor = NSColor.secondaryLabelColor
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        addSubview(imageView)
+        
+        // Add tracking area
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+    }
+    
+    override func mouseDown(with event: NSEvent) {
+        onDismiss()
+    }
+    
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+        imageView.contentTintColor = NSColor.labelColor
+    }
+    
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+        imageView.contentTintColor = NSColor.secondaryLabelColor
+    }
+}
+
 struct FloatingNotificationView: View {
     let title: String
     let subtitle: String
@@ -3468,7 +3527,6 @@ struct FloatingNotificationView: View {
     var iconName: String = "bell.fill"
     
     @State private var isAppearing = false
-    @State private var isHoveringClose = false
     
     var hasActions: Bool {
         onDone != nil || onSnooze != nil || onSkip != nil
@@ -3518,19 +3576,8 @@ struct FloatingNotificationView: View {
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                         
-                        // Fixed X button - single click handler
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(isHoveringClose ? .primary : .secondary.opacity(0.6))
-                            .scaleEffect(isHoveringClose ? 1.1 : 1.0)
-                            .onHover { hovering in
-                                withAnimation(.easeInOut(duration: 0.15)) {
-                                    isHoveringClose = hovering
-                                }
-                            }
-                            .onTapGesture {
-                                onDismiss()
-                            }
+                        // X close button
+                        CloseButton(onDismiss: onDismiss)
                     }
                     .opacity(isAppearing ? 1 : 0)
                 }
