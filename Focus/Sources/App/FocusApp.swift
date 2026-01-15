@@ -3226,7 +3226,6 @@ class FloatingNotificationManager {
     static let shared = FloatingNotificationManager()
     
     private var notificationPanel: NSPanel?
-    private var dismissTimer: Timer?
     private var keepOnTopTimer: Timer?
     private var taskMonitorTimer: Timer?
     private var notifiedTaskIds: Set<String> = []
@@ -3384,32 +3383,20 @@ class FloatingNotificationManager {
             panel.animator().alphaValue = 1
         }
         
-        // Keep panel on top
+        // Keep panel on top for a limited time
         self.keepOnTopTimer?.invalidate()
-        let keepOnTop = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.notificationPanel?.orderFrontRegardless()
-        }
-        RunLoop.main.add(keepOnTop, forMode: .common)
-        self.keepOnTopTimer = keepOnTop
+        self.keepOnTopTimer = nil
         
-        // Auto-dismiss timer - must add to common mode for it to fire
-        self.dismissTimer?.invalidate()
-        let dismissAfter = Timer(timeInterval: duration, repeats: false) { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.dismiss()
-            }
+        // Auto-dismiss using DispatchQueue (more reliable than Timer)
+        let dismissDuration = duration
+        DispatchQueue.main.asyncAfter(deadline: .now() + dismissDuration) { [weak self] in
+            self?.dismiss()
         }
-        RunLoop.main.add(dismissAfter, forMode: .common)
-        self.dismissTimer = dismissAfter
-        
-        print("DEBUG: Notification will auto-dismiss in \(duration) seconds")
     }
     
     func dismiss() {
         keepOnTopTimer?.invalidate()
         keepOnTopTimer = nil
-        dismissTimer?.invalidate()
-        dismissTimer = nil
         
         guard let panel = notificationPanel else { return }
         
