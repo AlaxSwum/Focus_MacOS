@@ -639,24 +639,33 @@ struct TaskRowAnimated: View {
     @State private var rowOpacity: Double = 1
     @State private var rowScale: CGFloat = 1.0
     @State private var isSliding = false
+    @State private var checkmarkScale: CGFloat = 0
+    @State private var showSuccessOverlay = false
     
     var body: some View {
-        ZStack(alignment: .trailing) {
-            // Green success background that reveals during slide
+        ZStack(alignment: .leading) {
+            // Green success background that reveals during slide LEFT
             HStack {
-                Spacer()
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16))
-                    Text("Completed!")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 18, weight: .bold))
+                        .scaleEffect(checkmarkScale)
+                    Text("Done!")
+                        .font(.system(size: 13, weight: .bold))
                 }
                 .foregroundColor(.white)
-                .padding(.horizontal, 16)
+                .padding(.leading, 20)
+                Spacer()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.green)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .background(
+                LinearGradient(
+                    colors: [Color.green, Color.green.opacity(0.8)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10))
             .opacity(isSliding ? 1 : 0)
             
             // Main row content
@@ -664,35 +673,51 @@ struct TaskRowAnimated: View {
                 // Animated Checkbox
                 AnimatedCheckbox(isCompleted: task.isCompleted) {
                     if !task.isCompleted {
-                        // COMPLETING: Slide right slowly then fade
+                        // COMPLETING: Advanced animation - slide LEFT
                         isSliding = true
                         
-                        // Step 1: Slight bounce
-                        withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
-                            rowScale = 1.02
+                        // Step 1: Quick scale pulse
+                        withAnimation(.spring(response: 0.15, dampingFraction: 0.5)) {
+                            rowScale = 1.03
                         }
                         
-                        // Step 2: Slide to the right slowly
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            withAnimation(.easeInOut(duration: 0.5)) {
-                                slideOffset = 80
-                                rowScale = 0.98
+                        // Step 2: Checkmark pops in on green background
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                                checkmarkScale = 1.2
                             }
                         }
                         
-                        // Step 3: Fade out and slide more
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                slideOffset = 150
+                        // Step 3: Checkmark settles
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                                checkmarkScale = 1.0
+                                rowScale = 1.0
+                            }
+                        }
+                        
+                        // Step 4: Slide smoothly to the LEFT
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            withAnimation(.easeInOut(duration: 0.45)) {
+                                slideOffset = -100  // Slide LEFT
+                                rowScale = 0.97
+                            }
+                        }
+                        
+                        // Step 5: Continue sliding and fade out
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                            withAnimation(.easeOut(duration: 0.25)) {
+                                slideOffset = -200  // More LEFT
                                 rowOpacity = 0
                             }
                         }
                         
-                        // Step 4: Reset after animation (task will move to Completed list)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                        // Step 6: Reset after animation
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                             slideOffset = 0
                             rowOpacity = 1
                             rowScale = 1.0
+                            checkmarkScale = 0
                             isSliding = false
                         }
                     }
@@ -700,7 +725,7 @@ struct TaskRowAnimated: View {
                 }
                 .frame(width: 32, height: 32)
                 
-                // Icon
+                // Icon with completion animation
                 ZStack {
                     RoundedRectangle(cornerRadius: 6)
                         .fill(taskColor.opacity(task.isCompleted ? 0.08 : 0.15))
@@ -708,6 +733,7 @@ struct TaskRowAnimated: View {
                     Image(systemName: taskIcon)
                         .font(.system(size: 12))
                         .foregroundColor(task.isCompleted ? taskColor.opacity(0.5) : taskColor)
+                        .symbolEffect(.bounce, value: task.isCompleted)
                 }
                 .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
                 
@@ -751,14 +777,15 @@ struct TaskRowAnimated: View {
             }
             .padding(10)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 10)
                     .fill(Color(nsColor: NSColor.controlBackgroundColor))
+                    .shadow(color: .black.opacity(isSliding ? 0.1 : 0), radius: 4, x: -2, y: 0)
             )
             .offset(x: slideOffset)
             .opacity(rowOpacity)
             .scaleEffect(rowScale)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
         .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
@@ -3659,7 +3686,7 @@ class FloatingNotificationManager {
     }
     
     private func showWindow(with view: FloatingNotificationView, height: CGFloat, duration: TimeInterval, hasActions: Bool = false) {
-        let windowWidth: CGFloat = 360
+        let windowWidth: CGFloat = 390  // Wider for better layout
         let windowHeight: CGFloat = height
 
         let hostingView = NSHostingView(rootView: view)
@@ -3798,17 +3825,17 @@ class FloatingNotificationManager {
         let notificationId = "\(task.id)-\(task.startHour)-\(task.startMinute)"
         notifiedTaskIds.remove(notificationId)
         
-        // Show snooze confirmation
-        show(title: "Snoozed", subtitle: task.title, body: "Will remind you again in 5 minutes", duration: 3.0)
+        // Show snooze confirmation with better message
+        show(title: "⏰ Reminder Snoozed", subtitle: task.title, body: "Will remind you again in 5 minutes", duration: 4.0)
         
-        // Re-notify in 5 minutes
+        // Re-notify in 5 minutes (300 seconds)
         DispatchQueue.main.asyncAfter(deadline: .now() + 300) { [weak self] in
             self?.showTaskReminder(task: task, minutesBefore: 0)
         }
     }
     
     private func skipTask(_ task: TaskItem) {
-        show(title: "Skipped", subtitle: task.title, body: "Task skipped for today", duration: 3.0)
+        show(title: "⏭️ Task Skipped", subtitle: task.title, body: "This task has been skipped for today", duration: 3.0)
     }
     
     private func formatTime12Hour(hour: Int, minute: Int) -> String {
@@ -3908,150 +3935,208 @@ struct FloatingNotificationView: View {
     var showCloseButton: Bool = true
     
     @State private var isAppearing = false
+    @State private var iconBounce = false
+    @State private var buttonHover: String? = nil
     
     var hasActions: Bool {
         onDone != nil || onSnooze != nil || onSkip != nil
     }
     
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // App logo with animation
+        HStack(alignment: .top, spacing: 14) {
+            // Icon with animation - cleaner look
             ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(LinearGradient(
-                        colors: [Color.purple, Color.pink],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
-                    .frame(width: 40, height: 40)
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.orange, Color.red.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 44, height: 44)
+                    .shadow(color: .orange.opacity(0.3), radius: 8, x: 0, y: 4)
                 
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 20))
+                Image(systemName: "bell.fill")
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(.white)
+                    .symbolEffect(.bounce, value: iconBounce)
             }
-            .scaleEffect(isAppearing ? 1 : 0.5)
+            .scaleEffect(isAppearing ? 1 : 0.3)
+            .rotationEffect(.degrees(isAppearing ? 0 : -30))
             .opacity(isAppearing ? 1 : 0)
             
-            // Content
-            VStack(alignment: .leading, spacing: 6) {
-                // Header row with title
+            // Content - Clean layout without "Project Next"
+            VStack(alignment: .leading, spacing: 8) {
+                // Title row
                 HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Project Next")
-                            .font(.system(size: 13, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 3) {
+                        // Main title (Task Reminder or custom)
+                        Text(title)
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundColor(.primary)
                         
-                        Text(subtitle.isEmpty ? title : subtitle)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.primary.opacity(0.9))
-                            .lineLimit(2)
+                        // Task name
+                        if !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.primary.opacity(0.85))
+                                .lineLimit(2)
+                        }
                     }
-                    .offset(x: isAppearing ? 0 : -20)
+                    .offset(x: isAppearing ? 0 : -30)
                     .opacity(isAppearing ? 1 : 0)
                     
                     Spacer(minLength: 8)
                     
-                    // Time label
+                    // Time badge
                     Text("now")
-                        .font(.system(size: 11))
+                        .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.secondary.opacity(0.1))
+                        .clipShape(Capsule())
                         .opacity(isAppearing ? 1 : 0)
                 }
                 
-                // Message
+                // Message with icon
                 if !message.isEmpty {
-                    Text(message)
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.orange)
+                        Text(message)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                    .offset(y: isAppearing ? 0 : 10)
+                    .opacity(isAppearing ? 1 : 0)
                 }
                 
-                // Action buttons
+                // Action buttons - improved design
                 if hasActions {
                     HStack(spacing: 10) {
                         if let onDone = onDone {
                             Button {
-                                onDone()
+                                withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                                    onDone()
+                                }
                             } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 10, weight: .bold))
+                                HStack(spacing: 5) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 12, weight: .bold))
                                     Text("Done")
-                                        .font(.system(size: 12, weight: .semibold))
+                                        .font(.system(size: 12, weight: .bold))
                                 }
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 7)
-                                .background(Color.green)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(
+                                    LinearGradient(
+                                        colors: [Color.green, Color.green.opacity(0.8)],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .shadow(color: .green.opacity(0.3), radius: 4, x: 0, y: 2)
                             }
                             .buttonStyle(.plain)
+                            .scaleEffect(buttonHover == "done" ? 1.05 : 1.0)
+                            .onHover { hovering in
+                                withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                                    buttonHover = hovering ? "done" : nil
+                                }
+                            }
                         }
                         
                         if let onSnooze = onSnooze {
                             Button {
-                                onSnooze()
+                                withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                                    onSnooze()
+                                }
                             } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "clock")
-                                        .font(.system(size: 10))
+                                HStack(spacing: 5) {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                        .font(.system(size: 11, weight: .semibold))
                                     Text("+5 min")
-                                        .font(.system(size: 12, weight: .semibold))
+                                        .font(.system(size: 12, weight: .bold))
                                 }
                                 .foregroundColor(.purple)
                                 .padding(.horizontal, 14)
-                                .padding(.vertical, 7)
-                                .background(Color.purple.opacity(0.15))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .padding(.vertical, 8)
+                                .background(Color.purple.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
                             .buttonStyle(.plain)
+                            .scaleEffect(buttonHover == "snooze" ? 1.05 : 1.0)
+                            .onHover { hovering in
+                                withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                                    buttonHover = hovering ? "snooze" : nil
+                                }
+                            }
                         }
                         
                         if let onSkip = onSkip {
                             Button {
-                                onSkip()
+                                withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                                    onSkip()
+                                }
                             } label: {
                                 Text("Skip")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(.system(size: 12, weight: .semibold))
                                     .foregroundColor(.secondary)
                                     .padding(.horizontal, 14)
-                                    .padding(.vertical, 7)
-                                    .background(Color.secondary.opacity(0.12))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .padding(.vertical, 8)
+                                    .background(Color.secondary.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
                             .buttonStyle(.plain)
+                            .scaleEffect(buttonHover == "skip" ? 1.05 : 1.0)
+                            .onHover { hovering in
+                                withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                                    buttonHover = hovering ? "skip" : nil
+                                }
+                            }
                         }
                     }
-                    .padding(.top, 4)
+                    .padding(.top, 6)
+                    .offset(y: isAppearing ? 0 : 20)
+                    .opacity(isAppearing ? 1 : 0)
                 }
             }
         }
-        .padding(14)
-        .padding(.trailing, showCloseButton ? 24 : 0) // Extra space for close button
-        .frame(width: 360)
+        .padding(16)
+        .padding(.trailing, showCloseButton ? 20 : 0)
+        .frame(width: 380)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(nsColor: NSColor.windowBackgroundColor))
-                .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: 8)
-                .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
+            RoundedRectangle(cornerRadius: 18)
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.2), radius: 25, x: 0, y: 10)
+                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
         .overlay(alignment: .topTrailing) {
-            // X close button in top-right corner
             if showCloseButton {
                 CloseButton(onDismiss: onDismiss)
-                    .frame(width: 20, height: 20)
-                    .padding(10)
+                    .frame(width: 22, height: 22)
+                    .padding(12)
             }
         }
-        .scaleEffect(isAppearing ? 1 : 0.9)
-        .offset(x: isAppearing ? 0 : 50)
+        .scaleEffect(isAppearing ? 1 : 0.85)
+        .offset(x: isAppearing ? 0 : 60)
         .opacity(isAppearing ? 1 : 0)
         .onAppear {
-            withAnimation(.easeOut(duration: 0.35)) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                 isAppearing = true
+            }
+            // Bounce the bell icon after appearing
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                iconBounce = true
             }
         }
     }
