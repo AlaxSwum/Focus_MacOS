@@ -1298,20 +1298,20 @@ struct TaskRowAnimated: View {
             showParticles = true
         }
         
-        // Step 5: Start sliding LEFT with slight rotation
+        // Step 5: Start sliding RIGHT with slight rotation
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                slideOffset = -80
-                rowRotation = -2
+                slideOffset = 80  // Slide RIGHT
+                rowRotation = 2   // Tilt right
             }
         }
         
-        // Step 6: Accelerate slide and fade
+        // Step 6: Accelerate slide RIGHT and fade
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.85) {
             withAnimation(.easeIn(duration: 0.3)) {
-                slideOffset = -300
+                slideOffset = 350  // More RIGHT
                 rowOpacity = 0
-                rowRotation = -5
+                rowRotation = 5    // More tilt right
                 rowScale = 0.9
             }
         }
