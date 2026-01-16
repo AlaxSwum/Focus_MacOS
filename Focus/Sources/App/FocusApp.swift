@@ -123,6 +123,347 @@ func loadAppLogo() -> NSImage? {
     return nil
 }
 
+// MARK: - Advanced Animation Components
+
+// Animated Button with hover, press, and ripple effects
+struct AnimatedButton<Content: View>: View {
+    let action: () -> Void
+    let content: () -> Content
+    
+    @State private var isHovered = false
+    @State private var isPressed = false
+    @State private var showRipple = false
+    @State private var rippleScale: CGFloat = 0
+    
+    init(action: @escaping () -> Void, @ViewBuilder content: @escaping () -> Content) {
+        self.action = action
+        self.content = content
+    }
+    
+    var body: some View {
+        Button(action: {
+            // Trigger press animation
+            withAnimation(.spring(response: 0.15, dampingFraction: 0.5)) {
+                isPressed = true
+            }
+            
+            // Ripple effect
+            showRipple = true
+            withAnimation(.easeOut(duration: 0.4)) {
+                rippleScale = 2.5
+            }
+            
+            // Reset and call action
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                    isPressed = false
+                }
+                action()
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                showRipple = false
+                rippleScale = 0
+            }
+        }) {
+            content()
+                .scaleEffect(isPressed ? 0.92 : (isHovered ? 1.03 : 1.0))
+                .brightness(isHovered ? 0.05 : 0)
+                .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
+                .animation(.spring(response: 0.15, dampingFraction: 0.5), value: isPressed)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+// Animated Icon Button with bounce effect
+struct AnimatedIconButton: View {
+    let icon: String
+    let color: Color
+    let size: CGFloat
+    let action: () -> Void
+    
+    @State private var isHovered = false
+    @State private var isPressed = false
+    @State private var bounce = false
+    
+    init(icon: String, color: Color = .primary, size: CGFloat = 16, action: @escaping () -> Void) {
+        self.icon = icon
+        self.color = color
+        self.size = size
+        self.action = action
+    }
+    
+    var body: some View {
+        Button(action: {
+            withAnimation(.spring(response: 0.15, dampingFraction: 0.4)) {
+                isPressed = true
+                bounce = true
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    isPressed = false
+                }
+                action()
+            }
+        }) {
+            Image(systemName: icon)
+                .font(.system(size: size, weight: .medium))
+                .foregroundColor(isHovered ? color : color.opacity(0.7))
+                .scaleEffect(isPressed ? 0.8 : (isHovered ? 1.15 : 1.0))
+                .rotationEffect(.degrees(isPressed ? -10 : 0))
+                .symbolEffect(.bounce, value: bounce)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+// Scale Button Style - for all buttons
+struct ScaleButtonStyle: ButtonStyle {
+    @State private var isHovered = false
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
+            .brightness(configuration.isPressed ? -0.05 : 0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
+// Bounce Button Style - more playful
+struct BounceButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.88 : 1.0)
+            .rotationEffect(.degrees(configuration.isPressed ? -2 : 0))
+            .animation(.spring(response: 0.2, dampingFraction: 0.5), value: configuration.isPressed)
+    }
+}
+
+// Animated List Row - for task list items
+struct AnimatedListRow<Content: View>: View {
+    let index: Int
+    let content: () -> Content
+    
+    @State private var appeared = false
+    @State private var isHovered = false
+    
+    var body: some View {
+        content()
+            .scaleEffect(appeared ? 1 : 0.8)
+            .opacity(appeared ? 1 : 0)
+            .offset(x: appeared ? 0 : -30)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isHovered ? Color.primary.opacity(0.05) : Color.clear)
+            )
+            .scaleEffect(isHovered ? 1.01 : 1.0)
+            .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(Double(index) * 0.05), value: appeared)
+            .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isHovered)
+            .onAppear {
+                appeared = true
+            }
+            .onHover { hovering in
+                isHovered = hovering
+            }
+    }
+}
+
+// Animated Card - for task blocks, meeting cards etc
+struct AnimatedCard<Content: View>: View {
+    let content: () -> Content
+    
+    @State private var isHovered = false
+    @State private var appeared = false
+    
+    var body: some View {
+        content()
+            .scaleEffect(appeared ? 1 : 0.9)
+            .opacity(appeared ? 1 : 0)
+            .shadow(
+                color: isHovered ? Color.black.opacity(0.15) : Color.black.opacity(0.05),
+                radius: isHovered ? 12 : 4,
+                x: 0,
+                y: isHovered ? 6 : 2
+            )
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: appeared)
+            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isHovered)
+            .onAppear {
+                withAnimation {
+                    appeared = true
+                }
+            }
+            .onHover { hovering in
+                isHovered = hovering
+            }
+    }
+}
+
+// Success Checkmark Animation
+struct SuccessCheckmark: View {
+    @Binding var show: Bool
+    
+    @State private var circleScale: CGFloat = 0
+    @State private var checkScale: CGFloat = 0
+    @State private var circleOpacity: Double = 1
+    
+    var body: some View {
+        ZStack {
+            // Expanding circle
+            Circle()
+                .fill(Color.green.opacity(0.2))
+                .frame(width: 60, height: 60)
+                .scaleEffect(circleScale)
+                .opacity(circleOpacity)
+            
+            // Green circle
+            Circle()
+                .fill(Color.green)
+                .frame(width: 40, height: 40)
+                .scaleEffect(checkScale)
+            
+            // Checkmark
+            Image(systemName: "checkmark")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.white)
+                .scaleEffect(checkScale)
+        }
+        .opacity(show ? 1 : 0)
+        .onChange(of: show) { _, newValue in
+            if newValue {
+                // Animate in
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                    circleScale = 1.5
+                    checkScale = 1.2
+                }
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                        checkScale = 1.0
+                    }
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        circleScale = 2.0
+                        circleOpacity = 0
+                    }
+                }
+                
+                // Reset
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    show = false
+                    circleScale = 0
+                    checkScale = 0
+                    circleOpacity = 1
+                }
+            }
+        }
+    }
+}
+
+// Pulse Effect View
+struct PulseEffect: ViewModifier {
+    @State private var isPulsing = false
+    let color: Color
+    
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                Circle()
+                    .stroke(color, lineWidth: 2)
+                    .scaleEffect(isPulsing ? 1.5 : 1.0)
+                    .opacity(isPulsing ? 0 : 0.8)
+                    .animation(
+                        .easeOut(duration: 1.0)
+                        .repeatForever(autoreverses: false),
+                        value: isPulsing
+                    )
+            )
+            .onAppear {
+                isPulsing = true
+            }
+    }
+}
+
+extension View {
+    func pulseEffect(color: Color = .blue) -> some View {
+        modifier(PulseEffect(color: color))
+    }
+}
+
+// Shimmer Loading Effect
+struct ShimmerEffect: ViewModifier {
+    @State private var phase: CGFloat = 0
+    
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                GeometryReader { geo in
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0),
+                            Color.white.opacity(0.3),
+                            Color.white.opacity(0)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: geo.size.width * 2)
+                    .offset(x: -geo.size.width + phase * geo.size.width * 2)
+                }
+                .mask(content)
+            )
+            .onAppear {
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    phase = 1
+                }
+            }
+    }
+}
+
+extension View {
+    func shimmer() -> some View {
+        modifier(ShimmerEffect())
+    }
+}
+
+// Appear Animation Modifier
+struct AppearAnimation: ViewModifier {
+    @State private var appeared = false
+    let delay: Double
+    let direction: Edge
+    
+    func body(content: Content) -> some View {
+        content
+            .opacity(appeared ? 1 : 0)
+            .offset(
+                x: appeared ? 0 : (direction == .leading ? -30 : (direction == .trailing ? 30 : 0)),
+                y: appeared ? 0 : (direction == .top ? -20 : (direction == .bottom ? 20 : 0))
+            )
+            .scaleEffect(appeared ? 1 : 0.9)
+            .animation(.spring(response: 0.5, dampingFraction: 0.7).delay(delay), value: appeared)
+            .onAppear {
+                appeared = true
+            }
+    }
+}
+
+extension View {
+    func appearAnimation(delay: Double = 0, from direction: Edge = .bottom) -> some View {
+        modifier(AppearAnimation(delay: delay, direction: direction))
+    }
+}
+
 // MARK: - Animated Checkbox with Check Drawing Animation
 struct AnimatedCheckbox: View {
     let isCompleted: Bool
@@ -344,6 +685,8 @@ struct MenuBarDropdownView: View {
     @State private var selectedMeeting: TaskItem?
     @State private var tabDirection: Int = 0
     @State private var isHoveringFooter = false
+    @State private var subTabDirection: Int = 0
+    @State private var footerPressed = false
     
     var body: some View {
         ZStack {
@@ -448,35 +791,82 @@ struct MenuBarDropdownView: View {
     }
 
     private func tabButton(_ title: String, icon: String, index: Int) -> some View {
-        Button {
-            let oldTab = selectedTab
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                tabDirection = index > oldTab ? 1 : -1
-                selectedTab = index
+        TabButtonAnimated(
+            title: title,
+            icon: icon,
+            isSelected: selectedTab == index,
+            action: {
+                let oldTab = selectedTab
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    tabDirection = index > oldTab ? 1 : -1
+                    selectedTab = index
+                }
             }
-        } label: {
+        )
+    }
+}
+
+// Animated Tab Button Component
+struct TabButtonAnimated: View {
+    let title: String
+    let icon: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    @State private var isHovered = false
+    @State private var isPressed = false
+    
+    var body: some View {
+        Button(action: {
+            withAnimation(.spring(response: 0.15, dampingFraction: 0.5)) {
+                isPressed = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                    isPressed = false
+                }
+                action()
+            }
+        }) {
             HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.system(size: 11, weight: selectedTab == index ? .semibold : .regular))
-                    .symbolEffect(.bounce, value: selectedTab == index)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                    .symbolEffect(.bounce, value: isSelected)
+                    .rotationEffect(.degrees(isPressed ? -5 : 0))
                 Text(title)
-                    .font(.system(size: 12, weight: selectedTab == index ? .semibold : .medium))
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
             }
-            .foregroundColor(selectedTab == index ? .white : .secondary)
+            .foregroundColor(isSelected ? .white : (isHovered ? .primary : .secondary))
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(selectedTab == index ? Color.accentColor : Color.clear)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedTab == index)
+                ZStack {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.accentColor)
+                            .shadow(color: Color.accentColor.opacity(0.4), radius: 4, x: 0, y: 2)
+                    } else if isHovered {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.accentColor.opacity(0.1))
+                    }
+                }
             )
             .clipShape(RoundedRectangle(cornerRadius: 8))
-            .scaleEffect(selectedTab == index ? 1.02 : 1.0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: selectedTab == index)
+            .scaleEffect(isPressed ? 0.92 : (isSelected ? 1.03 : (isHovered ? 1.02 : 1.0)))
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                isHovered = hovering
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+        .animation(.spring(response: 0.15, dampingFraction: 0.5), value: isPressed)
     }
+}
 
+// Continue MenuBarDropdownView extension
+extension MenuBarDropdownView {
     private var contentView: some View {
         ScrollView {
             LazyVStack(spacing: 8) {
@@ -541,8 +931,6 @@ struct MenuBarDropdownView: View {
     private var completedTasks: [TaskItem] {
         todayTasks.filter { $0.isCompleted }
     }
-    
-    @State private var subTabDirection: Int = 0
     
     private var todayContent: some View {
         VStack(spacing: 0) {
@@ -641,6 +1029,8 @@ struct TaskRowAnimated: View {
     @State private var isSliding = false
     @State private var checkmarkScale: CGFloat = 0
     @State private var showSuccessOverlay = false
+    @State private var isHovered = false
+    @State private var appeared = false
     
     var body: some View {
         ZStack(alignment: .leading) {
@@ -778,18 +1168,40 @@ struct TaskRowAnimated: View {
             .padding(10)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(nsColor: NSColor.controlBackgroundColor))
-                    .shadow(color: .black.opacity(isSliding ? 0.1 : 0), radius: 4, x: -2, y: 0)
+                    .fill(isHovered ? Color(nsColor: NSColor.controlBackgroundColor).opacity(0.9) : Color(nsColor: NSColor.controlBackgroundColor))
+                    .shadow(
+                        color: isHovered ? .black.opacity(0.12) : .black.opacity(isSliding ? 0.1 : 0.03),
+                        radius: isHovered ? 8 : (isSliding ? 4 : 2),
+                        x: isSliding ? -2 : 0,
+                        y: isHovered ? 4 : 1
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isHovered ? taskColor.opacity(0.3) : Color.clear, lineWidth: 1)
             )
             .offset(x: slideOffset)
             .opacity(rowOpacity)
-            .scaleEffect(rowScale)
+            .scaleEffect(isHovered && !isSliding ? 1.02 : rowScale)
         }
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .scaleEffect(appeared ? 1 : 0.9)
+        .opacity(appeared ? 1 : 0)
+        .offset(x: appeared ? 0 : -20)
+        .animation(.spring(response: 0.4, dampingFraction: 0.75), value: appeared)
+        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isHovered)
         .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
         .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered = hovering
+        }
         .onTapGesture(count: 2) {
             onDoubleTap?()
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                appeared = true
+            }
         }
     }
 }
@@ -997,42 +1409,59 @@ extension MenuBarDropdownView {
         }
         .buttonStyle(.plain)
     }
-
+    
     private var footerView: some View {
         Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                openFullAppWindow()
+            withAnimation(.spring(response: 0.1, dampingFraction: 0.5)) {
+                footerPressed = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    footerPressed = false
+                    openFullAppWindow()
+                }
             }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "macwindow")
                     .font(.system(size: 12))
-                    .rotationEffect(.degrees(isHoveringFooter ? 5 : 0))
+                    .rotationEffect(.degrees(isHoveringFooter ? 5 : (footerPressed ? -3 : 0)))
+                    .scaleEffect(footerPressed ? 0.9 : 1.0)
                 Text("Open Full App")
                     .font(.system(size: 12, weight: .medium))
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 10, weight: .semibold))
                     .opacity(isHoveringFooter ? 1 : 0)
-                    .offset(x: isHoveringFooter ? 0 : -5)
+                    .offset(x: isHoveringFooter ? 0 : -5, y: footerPressed ? -2 : 0)
             }
             .foregroundColor(isHoveringFooter ? .accentColor : .secondary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isHoveringFooter ? Color.accentColor.opacity(0.1) : Color(nsColor: NSColor.controlBackgroundColor))
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isHoveringFooter ? Color.accentColor.opacity(0.12) : Color(nsColor: NSColor.controlBackgroundColor))
+                    .shadow(
+                        color: isHoveringFooter ? Color.accentColor.opacity(0.2) : .clear,
+                        radius: isHoveringFooter ? 6 : 0,
+                        y: isHoveringFooter ? 2 : 0
+                    )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isHoveringFooter ? Color.accentColor.opacity(0.3) : Color(nsColor: NSColor.separatorColor), lineWidth: isHoveringFooter ? 1 : 0.5)
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(
+                        isHoveringFooter ? Color.accentColor.opacity(0.4) : Color(nsColor: NSColor.separatorColor).opacity(0.5),
+                        lineWidth: isHoveringFooter ? 1.5 : 0.5
+                    )
             )
-            .scaleEffect(isHoveringFooter ? 1.02 : 1.0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHoveringFooter)
+            .scaleEffect(footerPressed ? 0.96 : (isHoveringFooter ? 1.02 : 1.0))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            isHoveringFooter = hovering
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+                isHoveringFooter = hovering
+            }
         }
+        .animation(.spring(response: 0.15, dampingFraction: 0.5), value: footerPressed)
         .padding(.horizontal, 12)
         .padding(.bottom, 10)
     }
