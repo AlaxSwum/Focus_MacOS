@@ -75,12 +75,18 @@ struct AddEditTaskView: View {
         self.initialEndTime = endTime
         
         if let task = task {
-            // Editing existing task
+            // Editing existing task - use task's raw hour/minute values for accurate time
             _title = State(initialValue: task.title)
             _description = State(initialValue: task.description ?? "")
             _selectedDate = State(initialValue: task.date)
-            _startTime = State(initialValue: task.startTime ?? date)
-            _endTime = State(initialValue: task.endTime ?? date.addingTimeInterval(1800))
+            
+            // Build start/end time from task's hour/minute values (more reliable than Date? properties)
+            let calendar = Calendar.current
+            let taskStartTime = calendar.date(bySettingHour: task.startHour, minute: task.startMinute, second: 0, of: task.date) ?? task.date
+            let taskEndTime = calendar.date(bySettingHour: task.endHour, minute: task.endMinute, second: 0, of: task.date) ?? task.date.addingTimeInterval(1800)
+            
+            _startTime = State(initialValue: taskStartTime)
+            _endTime = State(initialValue: taskEndTime)
             _meetingLink = State(initialValue: task.meetingLink ?? "")
             if case .timeBlock(let blockType) = task.type {
                 _selectedType = State(initialValue: blockType)
