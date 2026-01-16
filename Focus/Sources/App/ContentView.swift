@@ -1012,12 +1012,12 @@ struct FullCalendarView: View {
             }
         }
         .sheet(isPresented: $showAddTask) {
-            AddEditTaskView(date: selectedDate, task: nil)
+            AddEditTaskView(date: selectedDate, task: nil, startTime: dragStartTime, endTime: dragEndTime)
                 .environmentObject(taskManager)
                 .environmentObject(authManager)
         }
         .sheet(item: $taskToEdit) { task in
-            AddEditTaskView(date: selectedDate, task: task)
+            AddEditTaskView(date: selectedDate, task: task, startTime: nil, endTime: nil)
                 .environmentObject(taskManager)
                 .environmentObject(authManager)
         }

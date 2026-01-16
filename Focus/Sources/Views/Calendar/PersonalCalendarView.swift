@@ -57,7 +57,7 @@ struct PersonalCalendarView: View {
         .frame(minWidth: 500, minHeight: 600)
         .background(Color.systemBackground)
         .sheet(item: $taskToEdit) { task in
-            AddEditTaskView(date: selectedDate, task: task)
+            AddEditTaskView(date: selectedDate, task: task, startTime: nil, endTime: nil)
                 .environmentObject(taskManager)
                 .environmentObject(authManager)
         }

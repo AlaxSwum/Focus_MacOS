@@ -34,6 +34,8 @@ struct AddEditTaskView: View {
     
     let date: Date
     let task: TaskItem?
+    let initialStartTime: Date?
+    let initialEndTime: Date?
     
     // Form state
     @State private var title: String = ""
@@ -66,11 +68,14 @@ struct AddEditTaskView: View {
         defaultCategories + customCategories
     }
     
-    init(date: Date, task: TaskItem?) {
+    init(date: Date, task: TaskItem?, startTime: Date? = nil, endTime: Date? = nil) {
         self.date = date
         self.task = task
+        self.initialStartTime = startTime
+        self.initialEndTime = endTime
         
         if let task = task {
+            // Editing existing task
             _title = State(initialValue: task.title)
             _description = State(initialValue: task.description ?? "")
             _selectedDate = State(initialValue: task.date)
@@ -80,7 +85,13 @@ struct AddEditTaskView: View {
             if case .timeBlock(let blockType) = task.type {
                 _selectedType = State(initialValue: blockType)
             }
+        } else if let start = startTime, let end = endTime {
+            // Creating from drag selection - USE THE DRAGGED TIMES
+            _selectedDate = State(initialValue: date)
+            _startTime = State(initialValue: start)
+            _endTime = State(initialValue: end)
         } else {
+            // Creating new without selection - use current time rounded to 15 min
             _selectedDate = State(initialValue: date)
             let calendar = Calendar.current
             let hour = calendar.component(.hour, from: Date())
@@ -669,7 +680,7 @@ struct AddEditTaskView: View {
 }
 
 #Preview {
-    AddEditTaskView(date: Date(), task: nil)
+    AddEditTaskView(date: Date(), task: nil, startTime: nil, endTime: nil)
         .environmentObject(TaskManager.shared)
         .environmentObject(AuthManager.shared)
 }
