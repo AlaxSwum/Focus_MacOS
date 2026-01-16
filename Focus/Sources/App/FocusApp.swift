@@ -1115,8 +1115,14 @@ struct TaskRowAnimated: View {
                 Button {
                     if !task.isCompleted {
                         triggerCompletionAnimation()
+                        // Delay the actual completion so animation can play
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                            Task { await taskManager.toggleComplete(task: task) }
+                        }
+                    } else {
+                        // Uncompleting - do immediately
+                        Task { await taskManager.toggleComplete(task: task) }
                     }
-                    Task { await taskManager.toggleComplete(task: task) }
                 } label: {
                     ZStack {
                         // Outer ring
@@ -1260,64 +1266,57 @@ struct TaskRowAnimated: View {
     private func triggerCompletionAnimation() {
         isAnimating = true
         
-        // Step 1: Initial pulse and lift
-        withAnimation(.spring(response: 0.15, dampingFraction: 0.5)) {
-            rowScale = 1.05
+        // Step 1: Quick bounce
+        withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) {
+            rowScale = 1.08
         }
         
-        // Step 2: Show green glow
-        withAnimation(.easeInOut(duration: 0.3)) {
-            successGlow = 0.6
+        // Step 2: Show success elements immediately
+        withAnimation(.easeOut(duration: 0.2)) {
+            successGlow = 0.8
+            checkmarkScale = 1.0
+            checkmarkRotation = 0
         }
         
-        // Step 3: Checkmark appears with rotation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
-                checkmarkScale = 1.3
-                checkmarkRotation = 0
-            }
-            
-            // Expanding ring
-            withAnimation(.easeOut(duration: 0.5)) {
-                circleScale = 2
-                circleOpacity = 0.8
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                withAnimation(.easeOut(duration: 0.3)) {
-                    circleOpacity = 0
-                }
-            }
+        // Step 3: Expanding ring effect
+        withAnimation(.easeOut(duration: 0.4)) {
+            circleScale = 1.8
+            circleOpacity = 1.0
         }
         
-        // Step 4: Checkmark settles
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
-                checkmarkScale = 1.0
+        // Step 4: Scale back and show particles
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                 rowScale = 1.0
             }
             showParticles = true
-        }
-        
-        // Step 5: Start sliding RIGHT with slight rotation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                slideOffset = 80  // Slide RIGHT
-                rowRotation = 2   // Tilt right
+            
+            // Fade ring
+            withAnimation(.easeOut(duration: 0.3)) {
+                circleOpacity = 0
             }
         }
         
-        // Step 6: Accelerate slide RIGHT and fade
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.85) {
-            withAnimation(.easeIn(duration: 0.3)) {
-                slideOffset = 350  // More RIGHT
+        // Step 5: VISIBLE SLIDE TO THE RIGHT - slower and clearer
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                slideOffset = 120  // Slide RIGHT - visible amount
+                rowRotation = 3    // Slight tilt
+            }
+        }
+        
+        // Step 6: Continue sliding RIGHT and fade out
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+            withAnimation(.easeIn(duration: 0.4)) {
+                slideOffset = 400  // Far RIGHT
                 rowOpacity = 0
-                rowRotation = 5    // More tilt right
-                rowScale = 0.9
+                rowRotation = 8
+                rowScale = 0.85
             }
         }
         
-        // Step 7: Reset
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+        // Step 7: Reset after animation completes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
             slideOffset = 0
             rowOpacity = 1
             rowScale = 1.0
