@@ -1409,12 +1409,36 @@ struct FullCalendarView: View {
     private var hourGrid: some View {
         VStack(spacing: 0) {
             ForEach(0..<24, id: \.self) { hour in
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(height: 1)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: hourHeight, alignment: .top)
-                    .id(hour)
+                ZStack(alignment: .top) {
+                    // Main hour line (solid)
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(height: 1)
+                        .frame(maxWidth: .infinity)
+                    
+                    // 15-minute line (dotted/light)
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.1))
+                        .frame(height: 1)
+                        .frame(maxWidth: .infinity)
+                        .offset(y: hourHeight * 0.25)
+                    
+                    // 30-minute line (medium)
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 1)
+                        .frame(maxWidth: .infinity)
+                        .offset(y: hourHeight * 0.5)
+                    
+                    // 45-minute line (dotted/light)
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.1))
+                        .frame(height: 1)
+                        .frame(maxWidth: .infinity)
+                        .offset(y: hourHeight * 0.75)
+                }
+                .frame(height: hourHeight, alignment: .top)
+                .id(hour)
             }
         }
     }
@@ -1445,17 +1469,36 @@ struct FullCalendarView: View {
                 dragCurrentY = value.location.y
             }
             .onEnded { _ in
-                let startHour = Int(min(dragStartY, dragCurrentY) / hourHeight)
-                let endHour = Int(max(dragStartY, dragCurrentY) / hourHeight) + 1
+                // Snap to 15-minute intervals
+                let quarterHeight = hourHeight / 4  // 15 minutes
+                
+                let startY = min(dragStartY, dragCurrentY)
+                let endY = max(dragStartY, dragCurrentY)
+                
+                // Calculate start time (snap to nearest 15 min)
+                let startQuarters = Int(startY / quarterHeight)
+                let startHour = startQuarters / 4
+                let startMinute = (startQuarters % 4) * 15
+                
+                // Calculate end time (snap to nearest 15 min, minimum 15 min duration)
+                let endQuarters = max(startQuarters + 1, Int(endY / quarterHeight) + 1)
+                let endHour = endQuarters / 4
+                let endMinute = (endQuarters % 4) * 15
                 
                 let calendar = Calendar.current
                 var startComps = calendar.dateComponents([.year, .month, .day], from: selectedDate)
                 startComps.hour = max(0, min(23, startHour))
-                startComps.minute = 0
+                startComps.minute = startMinute
                 
                 var endComps = calendar.dateComponents([.year, .month, .day], from: selectedDate)
-                endComps.hour = max(1, min(24, endHour))
-                endComps.minute = 0
+                endComps.hour = max(0, min(24, endHour))
+                endComps.minute = endMinute
+                
+                // Handle end time going to next day
+                if endHour >= 24 {
+                    endComps.hour = 23
+                    endComps.minute = 59
+                }
                 
                 dragStartTime = calendar.date(from: startComps)
                 dragEndTime = calendar.date(from: endComps)
@@ -1468,29 +1511,67 @@ struct FullCalendarView: View {
     private var dragPreview: some View {
         let top = min(dragStartY, dragCurrentY)
         let height = abs(dragCurrentY - dragStartY)
-        let startHour = Int(top / hourHeight)
-        let endHour = Int((top + height) / hourHeight) + 1
         
-        return VStack {
+        // Snap to 15-minute intervals for preview
+        let quarterHeight = hourHeight / 4
+        let startQuarters = Int(top / quarterHeight)
+        let startHour = startQuarters / 4
+        let startMinute = (startQuarters % 4) * 15
+        
+        let endQuarters = max(startQuarters + 1, Int((top + height) / quarterHeight) + 1)
+        let endHour = endQuarters / 4
+        let endMinute = (endQuarters % 4) * 15
+        
+        // Snap the preview box to 15-minute grid
+        let snappedTop = CGFloat(startQuarters) * quarterHeight
+        let snappedHeight = CGFloat(endQuarters - startQuarters) * quarterHeight
+        
+        // Calculate duration
+        let totalMinutes = (endQuarters - startQuarters) * 15
+        let durationText = totalMinutes >= 60 
+            ? "\(totalMinutes / 60)h \(totalMinutes % 60 > 0 ? "\(totalMinutes % 60)m" : "")"
+            : "\(totalMinutes)m"
+        
+        return VStack(spacing: 4) {
             Text("New Task")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.accentColor)
-            Text("\(formatHour(startHour)) - \(formatHour(endHour))")
-                .font(.caption)
-                .foregroundColor(.accentColor.opacity(0.8))
+            Text("\(formatHourMinute(startHour, startMinute)) - \(formatHourMinute(endHour, endMinute))")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.accentColor.opacity(0.9))
+            Text(durationText)
+                .font(.system(size: 10))
+                .foregroundColor(.accentColor.opacity(0.7))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Color.accentColor.opacity(0.15))
+                .clipShape(Capsule())
         }
         .frame(maxWidth: .infinity)
-        .frame(height: max(hourHeight, height))
+        .frame(height: max(quarterHeight, snappedHeight))
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.accentColor.opacity(0.2))
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.accentColor.opacity(0.15))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [5]))
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
                 )
         )
         .padding(.horizontal, 8)
-        .offset(y: top)
+        .offset(y: snappedTop)
+        .animation(.spring(response: 0.15, dampingFraction: 0.8), value: snappedTop)
+        .animation(.spring(response: 0.15, dampingFraction: 0.8), value: snappedHeight)
+    }
+    
+    private func formatHourMinute(_ hour: Int, _ minute: Int) -> String {
+        let h = hour % 24
+        let period = h >= 12 ? "PM" : "AM"
+        let displayHour = h == 0 ? 12 : (h > 12 ? h - 12 : h)
+        if minute == 0 {
+            return "\(displayHour) \(period)"
+        } else {
+            return "\(displayHour):\(String(format: "%02d", minute)) \(period)"
+        }
     }
     
     // MARK: - Helpers
@@ -2086,6 +2167,13 @@ struct ResizableTaskBlock: View {
     @EnvironmentObject var taskManager: TaskManager
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging = false
+    
+    // Completion animation states
+    @State private var isCompletingAnimation = false
+    @State private var slideOffset: CGFloat = 0
+    @State private var completionOpacity: Double = 1
+    @State private var checkmarkScale: CGFloat = 0
+    @State private var showCompletionOverlay = false
 
     private var position: (CGFloat, CGFloat) {
         // Use raw hour/minute values directly
@@ -2177,10 +2265,76 @@ struct ResizableTaskBlock: View {
                 Spacer()
                 
                 if !isDragging && !isResizing {
-                    Button { onComplete() } label: {
-                        Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 16))
-                            .foregroundColor(task.isCompleted ? .green : .gray)
+                    Button {
+                        // Animate completion
+                        if !task.isCompleted && !isCompletingAnimation {
+                            isCompletingAnimation = true
+                            showCompletionOverlay = true
+                            
+                            // Step 1: Checkmark pops in
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) {
+                                checkmarkScale = 1.3
+                            }
+                            
+                            // Step 2: Checkmark settles
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                                    checkmarkScale = 1.0
+                                }
+                            }
+                            
+                            // Step 3: Slide left
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                withAnimation(.easeInOut(duration: 0.4)) {
+                                    slideOffset = -120
+                                }
+                            }
+                            
+                            // Step 4: Fade out
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+                                withAnimation(.easeOut(duration: 0.25)) {
+                                    completionOpacity = 0
+                                }
+                            }
+                            
+                            // Step 5: Call completion and reset
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                                onComplete()
+                            }
+                            
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                slideOffset = 0
+                                completionOpacity = 1
+                                checkmarkScale = 0
+                                showCompletionOverlay = false
+                                isCompletingAnimation = false
+                            }
+                        } else {
+                            onComplete()
+                        }
+                    } label: {
+                        ZStack {
+                            // Background circle for completion animation
+                            if showCompletionOverlay || task.isCompleted {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 22, height: 22)
+                                    .scaleEffect(showCompletionOverlay ? checkmarkScale : 1.0)
+                            }
+                            
+                            // Empty circle
+                            Circle()
+                                .strokeBorder(Color.gray.opacity(0.4), lineWidth: 2)
+                                .frame(width: 22, height: 22)
+                                .opacity(showCompletionOverlay || task.isCompleted ? 0 : 1)
+                            
+                            // Checkmark
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                                .scaleEffect(showCompletionOverlay ? checkmarkScale : (task.isCompleted ? 1 : 0))
+                                .opacity(showCompletionOverlay || task.isCompleted ? 1 : 0)
+                        }
                     }
                     .buttonStyle(.plain)
                     .padding(.trailing, 8)
@@ -2237,15 +2391,48 @@ struct ResizableTaskBlock: View {
         }
         .frame(height: height)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(task.type.color.opacity(task.isCompleted ? 0.1 : 0.15))
+            ZStack {
+                // Green completion background (reveals when sliding left)
+                if showCompletionOverlay {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.green, Color.green.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .overlay(
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 16, weight: .bold))
+                                Text("Done!")
+                                    .font(.system(size: 12, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.leading, 12)
+                            ,
+                            alignment: .leading
+                        )
+                }
+                
+                // Normal background
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(task.type.color.opacity(task.isCompleted ? 0.1 : 0.15))
+                    .offset(x: slideOffset)
+                    .opacity(completionOpacity)
+            }
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6)
                 .strokeBorder(task.type.color.opacity(isDragging || isResizing ? 1 : 0.4), lineWidth: isDragging || isResizing ? 2 : 1)
+                .offset(x: slideOffset)
+                .opacity(completionOpacity)
         )
         .padding(.horizontal, 8)
         .offset(y: top + dragOffset)
+        .offset(x: slideOffset)
+        .opacity(completionOpacity)
         .onTapGesture { onTap() }
         .contextMenu {
             Button { onEdit() } label: { Label("Edit", systemImage: "pencil") }
@@ -2253,6 +2440,7 @@ struct ResizableTaskBlock: View {
             Divider()
             Button { onComplete() } label: { Label(task.isCompleted ? "Mark Incomplete" : "Mark Complete", systemImage: task.isCompleted ? "circle" : "checkmark.circle") }
         }
+        .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
     }
 }
 
