@@ -1023,124 +1023,162 @@ struct TaskRowAnimated: View {
     let taskIcon: String
     var onDoubleTap: (() -> Void)? = nil
     
+    // Animation states
     @State private var slideOffset: CGFloat = 0
     @State private var rowOpacity: Double = 1
     @State private var rowScale: CGFloat = 1.0
-    @State private var isSliding = false
+    @State private var rowRotation: Double = 0
+    @State private var isAnimating = false
     @State private var checkmarkScale: CGFloat = 0
-    @State private var showSuccessOverlay = false
+    @State private var checkmarkRotation: Double = -180
+    @State private var successGlow: Double = 0
+    @State private var progressWidth: CGFloat = 0
+    @State private var showParticles = false
     @State private var isHovered = false
     @State private var appeared = false
+    @State private var circleScale: CGFloat = 0
+    @State private var circleOpacity: Double = 0
     
     var body: some View {
         ZStack(alignment: .leading) {
-            // Green success background that reveals during slide LEFT
-            HStack {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18, weight: .bold))
-                        .scaleEffect(checkmarkScale)
-                    Text("Done!")
-                        .font(.system(size: 13, weight: .bold))
-                }
-                .foregroundColor(.white)
-                .padding(.leading, 20)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
+            // Animated success background that reveals during slide
+            ZStack {
+                // Gradient background
                 LinearGradient(
-                    colors: [Color.green, Color.green.opacity(0.8)],
+                    colors: [Color.green.opacity(0.9), Color.green, Color.mint.opacity(0.8)],
                     startPoint: .leading,
                     endPoint: .trailing
                 )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .opacity(isSliding ? 1 : 0)
+                
+                // Animated shimmer effect
+                GeometryReader { geo in
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.clear, .white.opacity(0.3), .clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: 60)
+                        .offset(x: isAnimating ? geo.size.width + 60 : -60)
+                        .animation(.easeInOut(duration: 0.8).delay(0.2), value: isAnimating)
+                }
+                
+                // Success content
+                HStack(spacing: 12) {
+                    // Animated checkmark with ring
+                    ZStack {
+                        // Expanding ring
+                        Circle()
+                            .stroke(Color.white.opacity(0.5), lineWidth: 2)
+                            .frame(width: 36, height: 36)
+                            .scaleEffect(circleScale)
+                            .opacity(circleOpacity)
+                        
+                        // Checkmark
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(.white)
+                            .scaleEffect(checkmarkScale)
+                            .rotationEffect(.degrees(checkmarkRotation))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Completed!")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white)
+                        
+                        Text("Great job!")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                    
+                    Spacer()
+                    
+                    // Star burst particles
+                    if showParticles {
+                        ParticleEmitter()
+                    }
+                }
+                .padding(.leading, 16)
+                .padding(.trailing, 20)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .opacity(isAnimating ? 1 : 0)
+            .shadow(color: .green.opacity(successGlow), radius: 12, x: 0, y: 0)
             
             // Main row content
-            HStack(spacing: 10) {
-                // Animated Checkbox
-                AnimatedCheckbox(isCompleted: task.isCompleted) {
+            HStack(spacing: 12) {
+                // Custom animated checkbox
+                Button {
                     if !task.isCompleted {
-                        // COMPLETING: Advanced animation - slide LEFT
-                        isSliding = true
-                        
-                        // Step 1: Quick scale pulse
-                        withAnimation(.spring(response: 0.15, dampingFraction: 0.5)) {
-                            rowScale = 1.03
-                        }
-                        
-                        // Step 2: Checkmark pops in on green background
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                                checkmarkScale = 1.2
-                            }
-                        }
-                        
-                        // Step 3: Checkmark settles
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                            withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
-                                checkmarkScale = 1.0
-                                rowScale = 1.0
-                            }
-                        }
-                        
-                        // Step 4: Slide smoothly to the LEFT
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                            withAnimation(.easeInOut(duration: 0.45)) {
-                                slideOffset = -100  // Slide LEFT
-                                rowScale = 0.97
-                            }
-                        }
-                        
-                        // Step 5: Continue sliding and fade out
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                            withAnimation(.easeOut(duration: 0.25)) {
-                                slideOffset = -200  // More LEFT
-                                rowOpacity = 0
-                            }
-                        }
-                        
-                        // Step 6: Reset after animation
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            slideOffset = 0
-                            rowOpacity = 1
-                            rowScale = 1.0
-                            checkmarkScale = 0
-                            isSliding = false
-                        }
+                        triggerCompletionAnimation()
                     }
                     Task { await taskManager.toggleComplete(task: task) }
+                } label: {
+                    ZStack {
+                        // Outer ring
+                        Circle()
+                            .strokeBorder(
+                                isHovered ? taskColor : Color.secondary.opacity(0.4),
+                                lineWidth: isHovered ? 2.5 : 2
+                            )
+                            .frame(width: 26, height: 26)
+                        
+                        // Fill on hover
+                        Circle()
+                            .fill(isHovered ? taskColor.opacity(0.15) : Color.clear)
+                            .frame(width: 22, height: 22)
+                        
+                        // Check icon on hover
+                        if isHovered && !task.isCompleted {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(taskColor)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                        
+                        // Completed state
+                        if task.isCompleted {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 26, height: 26)
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHovered)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: task.isCompleted)
                 }
-                .frame(width: 32, height: 32)
+                .buttonStyle(.plain)
                 
-                // Icon with completion animation
+                // Task icon
                 ZStack {
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: 8)
                         .fill(taskColor.opacity(task.isCompleted ? 0.08 : 0.15))
-                        .frame(width: 28, height: 28)
+                        .frame(width: 32, height: 32)
                     Image(systemName: taskIcon)
-                        .font(.system(size: 12))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundColor(task.isCompleted ? taskColor.opacity(0.5) : taskColor)
                         .symbolEffect(.bounce, value: task.isCompleted)
                 }
-                .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
                 
                 // Content
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(task.title)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(task.isCompleted ? .secondary : .primary)
                         .strikethrough(task.isCompleted, color: .secondary)
                         .lineLimit(1)
-                        .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
                     
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
                             .font(.system(size: 9))
                         Text(task.timeText)
-                            .font(.system(size: 10))
+                            .font(.system(size: 10, weight: .medium))
                     }
                     .foregroundColor(.secondary)
                     .opacity(task.isCompleted ? 0.6 : 1)
@@ -1148,49 +1186,61 @@ struct TaskRowAnimated: View {
                 
                 Spacer()
                 
-                // Type badge + chevron for meetings
+                // Type badge
                 HStack(spacing: 6) {
                     Text(task.type == .meeting ? "Meeting" : task.type.displayName)
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(task.isCompleted ? taskColor.opacity(0.5) : taskColor)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(taskColor.opacity(task.isCompleted ? 0.05 : 0.1))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(taskColor.opacity(task.isCompleted ? 0.05 : 0.12))
                         .clipShape(Capsule())
                     
                     if task.type == .meeting {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 10))
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.secondary)
                     }
                 }
             }
-            .padding(10)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isHovered ? Color(nsColor: NSColor.controlBackgroundColor).opacity(0.9) : Color(nsColor: NSColor.controlBackgroundColor))
-                    .shadow(
-                        color: isHovered ? .black.opacity(0.12) : .black.opacity(isSliding ? 0.1 : 0.03),
-                        radius: isHovered ? 8 : (isSliding ? 4 : 2),
-                        x: isSliding ? -2 : 0,
-                        y: isHovered ? 4 : 1
-                    )
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(nsColor: NSColor.controlBackgroundColor))
+                    
+                    // Hover glow
+                    if isHovered {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(taskColor.opacity(0.03))
+                    }
+                }
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(isHovered ? taskColor.opacity(0.3) : Color.clear, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(
+                        isHovered ? taskColor.opacity(0.4) : Color(nsColor: NSColor.separatorColor).opacity(0.3),
+                        lineWidth: isHovered ? 1.5 : 1
+                    )
+            )
+            .shadow(
+                color: isHovered ? taskColor.opacity(0.15) : .black.opacity(0.05),
+                radius: isHovered ? 8 : 2,
+                x: 0,
+                y: isHovered ? 4 : 1
             )
             .offset(x: slideOffset)
             .opacity(rowOpacity)
-            .scaleEffect(isHovered && !isSliding ? 1.02 : rowScale)
+            .scaleEffect(rowScale)
+            .rotationEffect(.degrees(rowRotation))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .scaleEffect(appeared ? 1 : 0.9)
         .opacity(appeared ? 1 : 0)
         .offset(x: appeared ? 0 : -20)
         .animation(.spring(response: 0.4, dampingFraction: 0.75), value: appeared)
-        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isHovered)
-        .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
+        .animation(.spring(response: 0.2, dampingFraction: 0.7), value: isHovered)
         .contentShape(Rectangle())
         .onHover { hovering in
             isHovered = hovering
@@ -1199,8 +1249,131 @@ struct TaskRowAnimated: View {
             onDoubleTap?()
         }
         .onAppear {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                appeared = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 0...0.15)) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                    appeared = true
+                }
+            }
+        }
+    }
+    
+    private func triggerCompletionAnimation() {
+        isAnimating = true
+        
+        // Step 1: Initial pulse and lift
+        withAnimation(.spring(response: 0.15, dampingFraction: 0.5)) {
+            rowScale = 1.05
+        }
+        
+        // Step 2: Show green glow
+        withAnimation(.easeInOut(duration: 0.3)) {
+            successGlow = 0.6
+        }
+        
+        // Step 3: Checkmark appears with rotation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
+                checkmarkScale = 1.3
+                checkmarkRotation = 0
+            }
+            
+            // Expanding ring
+            withAnimation(.easeOut(duration: 0.5)) {
+                circleScale = 2
+                circleOpacity = 0.8
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    circleOpacity = 0
+                }
+            }
+        }
+        
+        // Step 4: Checkmark settles
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                checkmarkScale = 1.0
+                rowScale = 1.0
+            }
+            showParticles = true
+        }
+        
+        // Step 5: Start sliding LEFT with slight rotation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                slideOffset = -80
+                rowRotation = -2
+            }
+        }
+        
+        // Step 6: Accelerate slide and fade
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.85) {
+            withAnimation(.easeIn(duration: 0.3)) {
+                slideOffset = -300
+                rowOpacity = 0
+                rowRotation = -5
+                rowScale = 0.9
+            }
+        }
+        
+        // Step 7: Reset
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            slideOffset = 0
+            rowOpacity = 1
+            rowScale = 1.0
+            rowRotation = 0
+            checkmarkScale = 0
+            checkmarkRotation = -180
+            successGlow = 0
+            circleScale = 0
+            circleOpacity = 0
+            showParticles = false
+            isAnimating = false
+        }
+    }
+}
+
+// Particle effect for completion celebration
+struct ParticleEmitter: View {
+    @State private var particles: [(id: Int, x: CGFloat, y: CGFloat, scale: CGFloat, opacity: Double)] = []
+    
+    var body: some View {
+        ZStack {
+            ForEach(particles, id: \.id) { particle in
+                Image(systemName: ["star.fill", "sparkle", "circle.fill"].randomElement()!)
+                    .font(.system(size: CGFloat.random(in: 6...10)))
+                    .foregroundColor([.yellow, .white, .orange].randomElement()!)
+                    .scaleEffect(particle.scale)
+                    .opacity(particle.opacity)
+                    .offset(x: particle.x, y: particle.y)
+            }
+        }
+        .onAppear {
+            for i in 0..<8 {
+                let delay = Double(i) * 0.05
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    let id = i
+                    let startX: CGFloat = CGFloat.random(in: -10...10)
+                    let startY: CGFloat = CGFloat.random(in: -5...5)
+                    
+                    particles.append((id: id, x: startX, y: startY, scale: 0, opacity: 1))
+                    
+                    withAnimation(.easeOut(duration: 0.6)) {
+                        if let index = particles.firstIndex(where: { $0.id == id }) {
+                            particles[index].x = CGFloat.random(in: -40...40)
+                            particles[index].y = CGFloat.random(in: -30...30)
+                            particles[index].scale = CGFloat.random(in: 0.8...1.2)
+                        }
+                    }
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            if let index = particles.firstIndex(where: { $0.id == id }) {
+                                particles[index].opacity = 0
+                            }
+                        }
+                    }
+                }
             }
         }
     }
