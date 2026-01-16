@@ -4254,8 +4254,8 @@ class FloatingNotificationManager {
         let notificationId = "\(task.id)-\(task.startHour)-\(task.startMinute)"
         notifiedTaskIds.remove(notificationId)
         
-        // Show snooze confirmation with better message
-        show(title: "⏰ Reminder Snoozed", subtitle: task.title, body: "Will remind you again in 5 minutes", duration: 4.0)
+        // Just dismiss - no confirmation notification needed
+        self.dismiss()
         
         // Re-notify in 5 minutes (300 seconds)
         DispatchQueue.main.asyncAfter(deadline: .now() + 300) { [weak self] in
@@ -4264,7 +4264,8 @@ class FloatingNotificationManager {
     }
     
     private func skipTask(_ task: TaskItem) {
-        show(title: "⏭️ Task Skipped", subtitle: task.title, body: "This task has been skipped for today", duration: 3.0)
+        // Just dismiss - no confirmation notification needed
+        self.dismiss()
     }
     
     private func formatTime12Hour(hour: Int, minute: Int) -> String {

@@ -193,97 +193,181 @@ struct AddEditTaskView: View {
                         }
                     }
                     
-                    // Time Selection - Better Layout
-                    VStack(alignment: .leading, spacing: 12) {
-                        // Label row
+                    // Time Selection - Modern Design
+                    VStack(alignment: .leading, spacing: 14) {
+                        // Header with duration
                         HStack {
-                            Text("Time")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.primary)
+                            HStack(spacing: 6) {
+                                Image(systemName: "clock.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.accentColor)
+                                Text("Schedule")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.primary)
+                            }
                             
                             Spacer()
                             
-                            // Duration badge
+                            // Duration badge - cleaner design
                             let duration = Int(endTime.timeIntervalSince(startTime) / 60)
                             if duration > 0 {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "timer")
-                                        .font(.system(size: 10))
-                                    Text("\(duration) min")
-                                        .font(.system(size: 11, weight: .medium))
-                                }
-                                .foregroundColor(.blue)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.1))
-                                .clipShape(Capsule())
+                                let hours = duration / 60
+                                let mins = duration % 60
+                                let durationText = hours > 0 
+                                    ? (mins > 0 ? "\(hours)h \(mins)m" : "\(hours)h")
+                                    : "\(mins)m"
+                                
+                                Text(durationText)
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 5)
+                                    .background(
+                                        LinearGradient(
+                                            colors: [Color.accentColor, Color.accentColor.opacity(0.8)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .clipShape(Capsule())
                             }
                         }
                         
-                        // Time pickers in a card
-                        HStack(spacing: 16) {
-                            // Start Time
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("START")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundColor(.secondary)
+                        // Time pickers - Improved card design
+                        HStack(spacing: 0) {
+                            // Start Time Card
+                            VStack(spacing: 8) {
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(Color.green)
+                                        .frame(width: 6, height: 6)
+                                    Text("START")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(.secondary)
+                                        .tracking(1)
+                                }
                                 
                                 DatePicker("", selection: $startTime, displayedComponents: .hourAndMinute)
                                     .labelsHidden()
                                     .datePickerStyle(.field)
-                                    .frame(minWidth: 100)
+                                    .scaleEffect(1.1)
                             }
-                            .padding(14)
                             .frame(maxWidth: .infinity)
-                            .background(Color(nsColor: NSColor.controlBackgroundColor))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.gray.opacity(0.2)))
+                            .padding(.vertical, 16)
+                            .padding(.horizontal, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color(nsColor: NSColor.controlBackgroundColor))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(Color.green.opacity(0.3), lineWidth: 1.5)
+                            )
                             
-                            // Arrow
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.blue)
+                            // Arrow connector
+                            ZStack {
+                                Rectangle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.green.opacity(0.3), Color.orange.opacity(0.3)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: 40, height: 2)
+                                
+                                Image(systemName: "arrow.right.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: [Color.green, Color.orange],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                            }
+                            .padding(.horizontal, 8)
                             
-                            // End Time
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("END")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundColor(.secondary)
+                            // End Time Card
+                            VStack(spacing: 8) {
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(Color.orange)
+                                        .frame(width: 6, height: 6)
+                                    Text("END")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(.secondary)
+                                        .tracking(1)
+                                }
                                 
                                 DatePicker("", selection: $endTime, displayedComponents: .hourAndMinute)
                                     .labelsHidden()
                                     .datePickerStyle(.field)
-                                    .frame(minWidth: 100)
+                                    .scaleEffect(1.1)
                             }
-                            .padding(14)
                             .frame(maxWidth: .infinity)
-                            .background(Color(nsColor: NSColor.controlBackgroundColor))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.gray.opacity(0.2)))
+                            .padding(.vertical, 16)
+                            .padding(.horizontal, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color(nsColor: NSColor.controlBackgroundColor))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(Color.orange.opacity(0.3), lineWidth: 1.5)
+                            )
                         }
                         
-                        // Quick duration buttons
-                        HStack(spacing: 8) {
-                            Text("Quick:")
-                                .font(.system(size: 11))
+                        // Quick duration buttons - Better design
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Quick Duration")
+                                .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(.secondary)
                             
-                            ForEach([15, 30, 45, 60, 90], id: \.self) { mins in
-                                Button {
-                                    endTime = startTime.addingTimeInterval(Double(mins * 60))
-                                } label: {
-                                    Text("\(mins)m")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(Int(endTime.timeIntervalSince(startTime) / 60) == mins ? .white : .secondary)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 5)
-                                        .background(Int(endTime.timeIntervalSince(startTime) / 60) == mins ? Color.blue : Color(nsColor: NSColor.controlBackgroundColor))
-                                        .clipShape(Capsule())
+                            HStack(spacing: 6) {
+                                ForEach([15, 30, 45, 60, 90, 120], id: \.self) { mins in
+                                    let isSelected = Int(endTime.timeIntervalSince(startTime) / 60) == mins
+                                    let label = mins >= 60 ? "\(mins/60)h\(mins % 60 > 0 ? " \(mins % 60)m" : "")" : "\(mins)m"
+                                    
+                                    Button {
+                                        withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+                                            endTime = startTime.addingTimeInterval(Double(mins * 60))
+                                        }
+                                    } label: {
+                                        Text(label)
+                                            .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                                            .foregroundColor(isSelected ? .white : .primary)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 7)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .fill(isSelected 
+                                                        ? LinearGradient(colors: [.accentColor, .accentColor.opacity(0.8)], startPoint: .top, endPoint: .bottom)
+                                                        : LinearGradient(colors: [Color(nsColor: NSColor.controlBackgroundColor)], startPoint: .top, endPoint: .bottom)
+                                                    )
+                                            )
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .strokeBorder(isSelected ? Color.clear : Color.gray.opacity(0.2), lineWidth: 1)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .scaleEffect(isSelected ? 1.05 : 1.0)
+                                    .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isSelected)
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color(nsColor: NSColor.windowBackgroundColor))
+                            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(Color.gray.opacity(0.1), lineWidth: 1)
+                    )
                     
                     // Description
                     VStack(alignment: .leading, spacing: 6) {

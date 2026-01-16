@@ -1250,13 +1250,34 @@ struct FullCalendarView: View {
                         // Days columns
                         ForEach(Array(weekDays.enumerated()), id: \.element) { index, day in
                             ZStack(alignment: .topLeading) {
-                                    // Hour lines
+                                    // Hour lines with 15/30 minute intervals
                                     VStack(spacing: 0) {
                                         ForEach(0..<24, id: \.self) { _ in
-                                            Rectangle()
-                                                .fill(Color.gray.opacity(0.2))
-                                                .frame(height: 1)
-                                                .frame(height: hourHeight, alignment: .top)
+                                            ZStack(alignment: .top) {
+                                                // Main hour line
+                                                Rectangle()
+                                                    .fill(Color.gray.opacity(0.25))
+                                                    .frame(height: 1)
+                                                
+                                                // 15-minute line
+                                                Rectangle()
+                                                    .fill(Color.gray.opacity(0.08))
+                                                    .frame(height: 1)
+                                                    .offset(y: hourHeight * 0.25)
+                                                
+                                                // 30-minute line
+                                                Rectangle()
+                                                    .fill(Color.gray.opacity(0.15))
+                                                    .frame(height: 1)
+                                                    .offset(y: hourHeight * 0.5)
+                                                
+                                                // 45-minute line
+                                                Rectangle()
+                                                    .fill(Color.gray.opacity(0.08))
+                                                    .frame(height: 1)
+                                                    .offset(y: hourHeight * 0.75)
+                                            }
+                                            .frame(height: hourHeight, alignment: .top)
                                         }
                                     }
                                     
