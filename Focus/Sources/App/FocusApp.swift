@@ -4115,7 +4115,7 @@ class FloatingNotificationManager {
     }
     
     private func showWindow(with view: FloatingNotificationView, height: CGFloat, duration: TimeInterval, hasActions: Bool = false) {
-        let windowWidth: CGFloat = 390  // Wider for better layout
+        let windowWidth: CGFloat = 350  // Match notification width
         let windowHeight: CGFloat = height
 
         let hostingView = NSHostingView(rootView: view)
@@ -4365,210 +4365,246 @@ struct FloatingNotificationView: View {
     var showCloseButton: Bool = true
     
     @State private var isAppearing = false
-    @State private var iconBounce = false
+    @State private var iconPulse = false
     @State private var buttonHover: String? = nil
+    @State private var isHovered = false
     
     var hasActions: Bool {
         onDone != nil || onSnooze != nil || onSkip != nil
     }
     
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            // Icon with animation - cleaner look
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.orange, Color.red.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 44, height: 44)
-                    .shadow(color: .orange.opacity(0.3), radius: 8, x: 0, y: 4)
-                
-                Image(systemName: "bell.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(.white)
-                    .symbolEffect(.bounce, value: iconBounce)
-            }
-            .scaleEffect(isAppearing ? 1 : 0.3)
-            .rotationEffect(.degrees(isAppearing ? 0 : -30))
-            .opacity(isAppearing ? 1 : 0)
-            
-            // Content - Clean layout without "Project Next"
-            VStack(alignment: .leading, spacing: 8) {
-                // Title row
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        // Main title (Task Reminder or custom)
-                        Text(title)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.primary)
-                        
-                        // Task name
-                        if !subtitle.isEmpty {
-                            Text(subtitle)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.primary.opacity(0.85))
-                                .lineLimit(2)
-                        }
-                    }
-                    .offset(x: isAppearing ? 0 : -30)
-                    .opacity(isAppearing ? 1 : 0)
-                    
-                    Spacer(minLength: 8)
-                    
-                    // Time badge
-                    Text("now")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color.secondary.opacity(0.1))
-                        .clipShape(Capsule())
-                        .opacity(isAppearing ? 1 : 0)
-                }
-                
-                // Message with icon
-                if !message.isEmpty {
-                    HStack(spacing: 6) {
-                        Image(systemName: "clock.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(.orange)
-                        Text(message)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
-                    }
-                    .offset(y: isAppearing ? 0 : 10)
-                    .opacity(isAppearing ? 1 : 0)
-                }
-                
-                // Action buttons - improved design
-                if hasActions {
-                    HStack(spacing: 10) {
-                        if let onDone = onDone {
-                            Button {
-                                withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
-                                    onDone()
-                                }
-                            } label: {
-                                HStack(spacing: 5) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 12, weight: .bold))
-                                    Text("Done")
-                                        .font(.system(size: 12, weight: .bold))
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(
-                                    LinearGradient(
-                                        colors: [Color.green, Color.green.opacity(0.8)],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                .shadow(color: .green.opacity(0.3), radius: 4, x: 0, y: 2)
-                            }
-                            .buttonStyle(.plain)
-                            .scaleEffect(buttonHover == "done" ? 1.05 : 1.0)
-                            .onHover { hovering in
-                                withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
-                                    buttonHover = hovering ? "done" : nil
-                                }
-                            }
-                        }
-                        
-                        if let onSnooze = onSnooze {
-                            Button {
-                                withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
-                                    onSnooze()
-                                }
-                            } label: {
-                                HStack(spacing: 5) {
-                                    Image(systemName: "clock.arrow.circlepath")
-                                        .font(.system(size: 11, weight: .semibold))
-                                    Text("+5 min")
-                                        .font(.system(size: 12, weight: .bold))
-                                }
-                                .foregroundColor(.purple)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(Color.purple.opacity(0.12))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                            }
-                            .buttonStyle(.plain)
-                            .scaleEffect(buttonHover == "snooze" ? 1.05 : 1.0)
-                            .onHover { hovering in
-                                withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
-                                    buttonHover = hovering ? "snooze" : nil
-                                }
-                            }
-                        }
-                        
-                        if let onSkip = onSkip {
-                            Button {
-                                withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
-                                    onSkip()
-                                }
-                            } label: {
-                                Text("Skip")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundColor(.secondary)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                                    .background(Color.secondary.opacity(0.1))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                            }
-                            .buttonStyle(.plain)
-                            .scaleEffect(buttonHover == "skip" ? 1.05 : 1.0)
-                            .onHover { hovering in
-                                withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
-                                    buttonHover = hovering ? "skip" : nil
-                                }
-                            }
-                        }
-                    }
-                    .padding(.top, 6)
-                    .offset(y: isAppearing ? 0 : 20)
-                    .opacity(isAppearing ? 1 : 0)
-                }
+    // Get task color based on type
+    private var accentColor: Color {
+        if let task = task {
+            switch task.type {
+            case .timeBlock(let blockType):
+                return blockType.color
+            case .meeting: return .purple
+            case .todo: return .blue
+            case .social: return .pink
             }
         }
-        .padding(16)
-        .padding(.trailing, showCloseButton ? 20 : 0)
-        .frame(width: 380)
+        return .orange
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Main notification card
+            HStack(spacing: 16) {
+                // Left accent bar + icon
+                HStack(spacing: 0) {
+                    // Colored accent bar
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(accentColor)
+                        .frame(width: 4)
+                        .padding(.vertical, 8)
+                    
+                    // Icon
+                    ZStack {
+                        Circle()
+                            .fill(accentColor.opacity(0.15))
+                            .frame(width: 48, height: 48)
+                        
+                        Circle()
+                            .fill(accentColor.opacity(iconPulse ? 0.3 : 0))
+                            .frame(width: 48, height: 48)
+                            .scaleEffect(iconPulse ? 1.4 : 1)
+                        
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 22, weight: .medium))
+                            .foregroundStyle(accentColor)
+                    }
+                    .padding(.leading, 12)
+                }
+                .scaleEffect(isAppearing ? 1 : 0.5)
+                .opacity(isAppearing ? 1 : 0)
+                
+                // Content
+                VStack(alignment: .leading, spacing: 6) {
+                    // Header: Title + Time
+                    HStack(alignment: .top) {
+                        Text(title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.primary)
+                        
+                        Spacer()
+                        
+                        Text("now")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.white.opacity(0.9))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(accentColor.opacity(0.8))
+                            .clipShape(Capsule())
+                    }
+                    
+                    // Task name - prominent
+                    if !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.primary)
+                            .lineLimit(2)
+                    }
+                    
+                    // Time info
+                    if !message.isEmpty {
+                        HStack(spacing: 6) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 11, weight: .medium))
+                            Text(message)
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundColor(.secondary)
+                    }
+                }
+                .offset(x: isAppearing ? 0 : 20)
+                .opacity(isAppearing ? 1 : 0)
+                
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 14)
+            .padding(.horizontal, 4)
+            .padding(.trailing, 36) // Space for close button
+            
+            // Action buttons - Below content, full width
+            if hasActions {
+                Divider()
+                    .opacity(0.5)
+                
+                HStack(spacing: 0) {
+                    if let onDone = onDone {
+                        NotificationActionButton(
+                            label: "Done",
+                            icon: "checkmark.circle.fill",
+                            color: .green,
+                            isHovered: buttonHover == "done",
+                            action: onDone
+                        )
+                        .onHover { h in buttonHover = h ? "done" : nil }
+                        
+                        if onSnooze != nil || onSkip != nil {
+                            Divider()
+                                .frame(height: 32)
+                                .opacity(0.3)
+                        }
+                    }
+                    
+                    if let onSnooze = onSnooze {
+                        NotificationActionButton(
+                            label: "5 min",
+                            icon: "clock.arrow.circlepath",
+                            color: .purple,
+                            isHovered: buttonHover == "snooze",
+                            action: onSnooze
+                        )
+                        .onHover { h in buttonHover = h ? "snooze" : nil }
+                        
+                        if onSkip != nil {
+                            Divider()
+                                .frame(height: 32)
+                                .opacity(0.3)
+                        }
+                    }
+                    
+                    if let onSkip = onSkip {
+                        NotificationActionButton(
+                            label: "Skip",
+                            icon: "forward.fill",
+                            color: .gray,
+                            isHovered: buttonHover == "skip",
+                            action: onSkip
+                        )
+                        .onHover { h in buttonHover = h ? "skip" : nil }
+                    }
+                }
+                .frame(height: 44)
+                .offset(y: isAppearing ? 0 : 10)
+                .opacity(isAppearing ? 1 : 0)
+            }
+        }
+        .frame(width: 340)
         .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.2), radius: 25, x: 0, y: 10)
-                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(nsColor: NSColor.windowBackgroundColor))
+                .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: 8)
+                .shadow(color: .black.opacity(0.08), radius: 1, x: 0, y: 1)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.3), Color.white.opacity(0.1)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
         )
         .overlay(alignment: .topTrailing) {
             if showCloseButton {
-                CloseButton(onDismiss: onDismiss)
-                    .frame(width: 22, height: 22)
-                    .padding(12)
+                Button {
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 20, height: 20)
+                        .background(
+                            Circle()
+                                .fill(Color.secondary.opacity(isHovered ? 0.2 : 0.1))
+                        )
+                }
+                .buttonStyle(.plain)
+                .padding(10)
+                .onHover { h in isHovered = h }
             }
         }
-        .scaleEffect(isAppearing ? 1 : 0.85)
-        .offset(x: isAppearing ? 0 : 60)
+        .scaleEffect(isAppearing ? 1 : 0.9)
+        .offset(y: isAppearing ? 0 : -20)
         .opacity(isAppearing ? 1 : 0)
         .onAppear {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 isAppearing = true
             }
-            // Bounce the bell icon after appearing
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                iconBounce = true
+            // Pulse animation for icon
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                withAnimation(.easeOut(duration: 0.6)) {
+                    iconPulse = true
+                }
             }
         }
+    }
+}
+
+// Helper view for notification action buttons
+struct NotificationActionButton: View {
+    let label: String
+    let icon: String
+    let color: Color
+    let isHovered: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button {
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                action()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(label)
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundColor(isHovered ? color : .primary.opacity(0.7))
+            .frame(maxWidth: .infinity)
+            .frame(height: 44)
+            .background(isHovered ? color.opacity(0.1) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .animation(.spring(response: 0.2, dampingFraction: 0.7), value: isHovered)
     }
 }
 
