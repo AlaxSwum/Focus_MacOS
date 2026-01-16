@@ -3495,14 +3495,21 @@ struct FullAppWindowView: View {
             
             Spacer()
             
-            // Center section - Tab Selector
-            HStack(spacing: 2) {
+            // Center section - Tab Selector (prominent)
+            HStack(spacing: 4) {
                 tabButton("Personal", icon: "calendar", index: 0)
                 tabButton("Meeting Schedule", icon: "video", index: 1)
             }
-            .padding(3)
-            .background(Color(nsColor: NSColor.controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(4)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(nsColor: NSColor.windowBackgroundColor))
+                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color(nsColor: NSColor.separatorColor).opacity(0.5), lineWidth: 1)
+            )
             
             Spacer()
             
@@ -3543,15 +3550,33 @@ struct FullAppWindowView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(Color(nsColor: NSColor.windowBackgroundColor))
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .background(
+            ZStack {
+                Color(nsColor: NSColor.controlBackgroundColor)
+                
+                // Subtle gradient for depth
+                LinearGradient(
+                    colors: [Color.white.opacity(0.05), Color.clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        )
         .overlay(
             Rectangle()
-                .fill(Color(nsColor: NSColor.separatorColor))
+                .fill(
+                    LinearGradient(
+                        colors: [Color(nsColor: NSColor.separatorColor), Color(nsColor: NSColor.separatorColor).opacity(0.5)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
                 .frame(height: 1),
             alignment: .bottom
         )
+        .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
     }
     
     @State private var hoveredTab: Int? = nil
