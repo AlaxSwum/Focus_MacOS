@@ -394,6 +394,225 @@ struct SkippedTask: Codable, Identifiable {
     }
 }
 
+// MARK: - Rule Book Models
+
+/// Period type for rules
+enum RulePeriod: String, Codable, CaseIterable {
+    case daily = "daily"
+    case weekly = "weekly"
+    case monthly = "monthly"
+    case yearly = "yearly"
+    
+    var displayName: String {
+        switch self {
+        case .daily: return "Daily"
+        case .weekly: return "Weekly"
+        case .monthly: return "Monthly"
+        case .yearly: return "Yearly"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .daily: return "sun.max.fill"
+        case .weekly: return "calendar.badge.clock"
+        case .monthly: return "calendar"
+        case .yearly: return "star.fill"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .daily: return .orange
+        case .weekly: return .blue
+        case .monthly: return .purple
+        case .yearly: return .yellow
+        }
+    }
+    
+    var pointsMultiplier: Int {
+        switch self {
+        case .daily: return 1
+        case .weekly: return 5
+        case .monthly: return 20
+        case .yearly: return 100
+        }
+    }
+}
+
+/// A single rule in the rule book
+struct Rule: Codable, Identifiable, Hashable {
+    var id: String
+    var userId: Int
+    var title: String
+    var description: String?
+    var period: RulePeriod
+    var targetCount: Int  // How many times per period (e.g., 4 for "gym 4x/week")
+    var currentCount: Int // Current progress this period
+    var streakCount: Int  // Consecutive periods completed
+    var bestStreak: Int   // Best streak ever
+    var totalCompletions: Int // Total times completed all-time
+    var totalPoints: Int  // Points earned from this rule
+    var isActive: Bool
+    var createdAt: Date
+    var lastResetAt: Date
+    var lastCompletedAt: Date?
+    var emoji: String?    // Custom emoji for the rule
+    var colorHex: String? // Custom color
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case title
+        case description
+        case period
+        case targetCount = "target_count"
+        case currentCount = "current_count"
+        case streakCount = "streak_count"
+        case bestStreak = "best_streak"
+        case totalCompletions = "total_completions"
+        case totalPoints = "total_points"
+        case isActive = "is_active"
+        case createdAt = "created_at"
+        case lastResetAt = "last_reset_at"
+        case lastCompletedAt = "last_completed_at"
+        case emoji
+        case colorHex = "color_hex"
+    }
+    
+    var isCompletedForPeriod: Bool {
+        currentCount >= targetCount
+    }
+    
+    var progressPercentage: Double {
+        guard targetCount > 0 else { return 0 }
+        return min(Double(currentCount) / Double(targetCount) * 100, 100)
+    }
+    
+    var pointsForCompletion: Int {
+        period.pointsMultiplier * 10
+    }
+    
+    var color: Color {
+        if let hex = colorHex, let color = Color(hex: hex) {
+            return color
+        }
+        return period.color
+    }
+    
+    static func == (lhs: Rule, rhs: Rule) -> Bool {
+        lhs.id == rhs.id
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
+/// Daily rule check record
+struct RuleCheck: Codable, Identifiable {
+    var id: String
+    var ruleId: String
+    var userId: Int
+    var checkedAt: Date
+    var periodStart: Date
+    var periodEnd: Date
+    var points: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case ruleId = "rule_id"
+        case userId = "user_id"
+        case checkedAt = "checked_at"
+        case periodStart = "period_start"
+        case periodEnd = "period_end"
+        case points
+    }
+}
+
+/// User's gamification stats
+struct UserRuleStats: Codable {
+    var userId: Int
+    var totalPoints: Int
+    var currentLevel: Int
+    var totalRulesCompleted: Int
+    var longestStreak: Int
+    var currentDayStreak: Int
+    var badges: [String]
+    var lastActiveDate: Date?
+    
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case totalPoints = "total_points"
+        case currentLevel = "current_level"
+        case totalRulesCompleted = "total_rules_completed"
+        case longestStreak = "longest_streak"
+        case currentDayStreak = "current_day_streak"
+        case badges
+        case lastActiveDate = "last_active_date"
+    }
+    
+    var levelName: String {
+        switch currentLevel {
+        case 0...4: return "Beginner"
+        case 5...9: return "Apprentice"
+        case 10...19: return "Achiever"
+        case 20...29: return "Master"
+        case 30...49: return "Expert"
+        case 50...74: return "Champion"
+        case 75...99: return "Legend"
+        default: return "Mythic"
+        }
+    }
+    
+    var levelColor: Color {
+        switch currentLevel {
+        case 0...4: return .gray
+        case 5...9: return .green
+        case 10...19: return .blue
+        case 20...29: return .purple
+        case 30...49: return .orange
+        case 50...74: return .red
+        case 75...99: return .yellow
+        default: return .pink
+        }
+    }
+    
+    var pointsToNextLevel: Int {
+        let nextLevel = currentLevel + 1
+        return nextLevel * 100 - totalPoints
+    }
+    
+    var levelProgress: Double {
+        let currentLevelPoints = currentLevel * 100
+        let nextLevelPoints = (currentLevel + 1) * 100
+        let progressPoints = totalPoints - currentLevelPoints
+        let neededPoints = nextLevelPoints - currentLevelPoints
+        return Double(progressPoints) / Double(neededPoints) * 100
+    }
+}
+
+/// Badge definition
+struct Badge: Identifiable {
+    let id: String
+    let name: String
+    let description: String
+    let icon: String
+    let color: Color
+    let requirement: String
+    
+    static let allBadges: [Badge] = [
+        Badge(id: "first_rule", name: "Rule Maker", description: "Create your first rule", icon: "star.fill", color: .yellow, requirement: "Create 1 rule"),
+        Badge(id: "week_warrior", name: "Week Warrior", description: "Complete all rules for a week", icon: "flame.fill", color: .orange, requirement: "7 day streak"),
+        Badge(id: "month_master", name: "Month Master", description: "Complete all rules for a month", icon: "crown.fill", color: .purple, requirement: "30 day streak"),
+        Badge(id: "century", name: "Century", description: "Earn 100 points", icon: "100.circle.fill", color: .blue, requirement: "100 points"),
+        Badge(id: "thousand", name: "Thousand Club", description: "Earn 1000 points", icon: "bolt.fill", color: .yellow, requirement: "1000 points"),
+        Badge(id: "perfectionist", name: "Perfectionist", description: "Complete all daily rules 10 times", icon: "checkmark.seal.fill", color: .green, requirement: "10 perfect days"),
+        Badge(id: "consistent", name: "Consistent", description: "Maintain a 14 day streak", icon: "repeat.circle.fill", color: .mint, requirement: "14 day streak"),
+        Badge(id: "dedicated", name: "Dedicated", description: "Use the app for 30 days", icon: "heart.fill", color: .red, requirement: "30 days active"),
+    ]
+}
+
 // MARK: - Extensions
 extension DateFormatter {
     static let timeFormatter: DateFormatter = {
