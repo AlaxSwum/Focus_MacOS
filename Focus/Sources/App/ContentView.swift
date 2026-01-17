@@ -5055,6 +5055,590 @@ struct AddMeetingSheet: View {
         }
     }
 }
+
+// MARK: - Full Rule Book View
+struct FullRuleBookView: View {
+    @EnvironmentObject var taskManager: TaskManager
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var ruleManager = RuleManager.shared
+    @State private var selectedPeriod: Int = 0  // 0 = All, 1 = Daily, 2 = Weekly, 3 = Monthly
+    @State private var showAddRule = false
+    
+    private var filteredRules: [Rule] {
+        switch selectedPeriod {
+        case 1: return ruleManager.dailyRules
+        case 2: return ruleManager.weeklyRules
+        case 3: return ruleManager.monthlyRules
+        default: return ruleManager.rules
+        }
+    }
+    
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                // Left side - Stats & Reports
+                statsPanel
+                    .frame(width: 320)
+                
+                Divider()
+                
+                // Right side - Rules list
+                rulesPanel
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+    }
+    
+    // MARK: - Stats Panel
+    private var statsPanel: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Header
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "book.closed.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.green)
+                        Text("Rule Book")
+                            .font(.system(size: 28, weight: .bold))
+                    }
+                    
+                    Text("Track your habits and build consistency")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 8)
+                
+                // Overall Progress Card
+                overallProgressCard
+                
+                // Period Stats Cards
+                periodStatsCards
+                
+                // Gamification Stats
+                gamificationCard
+                
+                // Streak Card
+                streakCard
+                
+                Spacer()
+            }
+            .padding(24)
+        }
+        .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.5))
+    }
+    
+    private var overallProgressCard: some View {
+        let completedCount = ruleManager.rules.filter { $0.isCompletedForPeriod }.count
+        let totalCount = max(ruleManager.rules.count, 1)
+        let percentage = Double(completedCount) / Double(totalCount) * 100
+        
+        return VStack(spacing: 16) {
+            HStack {
+                Text("Today's Progress")
+                    .font(.system(size: 16, weight: .semibold))
+                Spacer()
+                Text("\(completedCount)/\(ruleManager.rules.count)")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+            
+            // Large progress circle
+            ZStack {
+                Circle()
+                    .stroke(Color.green.opacity(0.2), lineWidth: 12)
+                    .frame(width: 120, height: 120)
+                
+                Circle()
+                    .trim(from: 0, to: percentage / 100)
+                    .stroke(
+                        LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                    )
+                    .frame(width: 120, height: 120)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: percentage)
+                
+                VStack(spacing: 2) {
+                    Text("\(Int(percentage))%")
+                        .font(.system(size: 32, weight: .bold))
+                        .foregroundColor(.green)
+                    Text("Complete")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            // Status message
+            Text(percentage == 100 ? "All rules completed!" : percentage >= 50 ? "Great progress!" : "Keep going!")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(percentage >= 50 ? .green : .orange)
+        }
+        .padding(20)
+        .background(Color(nsColor: NSColor.windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 8, y: 4)
+    }
+    
+    private var periodStatsCards: some View {
+        VStack(spacing: 12) {
+            Text("By Period")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            
+            HStack(spacing: 12) {
+                periodStatCard("Daily", count: ruleManager.dailyRules.count, completed: ruleManager.dailyRules.filter { $0.isCompletedForPeriod }.count, color: .orange, icon: "sun.max.fill")
+                periodStatCard("Weekly", count: ruleManager.weeklyRules.count, completed: ruleManager.weeklyRules.filter { $0.isCompletedForPeriod }.count, color: .blue, icon: "calendar.badge.clock")
+            }
+            
+            HStack(spacing: 12) {
+                periodStatCard("Monthly", count: ruleManager.monthlyRules.count, completed: ruleManager.monthlyRules.filter { $0.isCompletedForPeriod }.count, color: .purple, icon: "calendar")
+                periodStatCard("Yearly", count: ruleManager.yearlyRules.count, completed: ruleManager.yearlyRules.filter { $0.isCompletedForPeriod }.count, color: .pink, icon: "sparkles")
+            }
+        }
+    }
+    
+    private func periodStatCard(_ title: String, count: Int, completed: Int, color: Color, icon: String) -> some View {
+        let percentage = count > 0 ? Double(completed) / Double(count) * 100 : 0
+        
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(color)
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                Spacer()
+            }
+            
+            Text("\(completed)/\(count)")
+                .font(.system(size: 20, weight: .bold))
+            
+            // Mini progress bar
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(color.opacity(0.2))
+                        .frame(height: 4)
+                    
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(color)
+                        .frame(width: geo.size.width * (percentage / 100), height: 4)
+                }
+            }
+            .frame(height: 4)
+            
+            Text("\(Int(percentage))%")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+        }
+        .padding(12)
+        .background(Color(nsColor: NSColor.windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+    
+    private var gamificationCard: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Gamification")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+            }
+            
+            HStack(spacing: 16) {
+                // Points
+                VStack(spacing: 4) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.yellow)
+                    Text("\(ruleManager.userStats.totalPoints)")
+                        .font(.system(size: 18, weight: .bold))
+                    Text("Points")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                
+                Divider()
+                    .frame(height: 50)
+                
+                // Level
+                VStack(spacing: 4) {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(ruleManager.userStats.levelColor)
+                    Text("Lv.\(ruleManager.userStats.currentLevel)")
+                        .font(.system(size: 18, weight: .bold))
+                    Text(ruleManager.userStats.levelName)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                
+                Divider()
+                    .frame(height: 50)
+                
+                // Badges
+                VStack(spacing: 4) {
+                    Image(systemName: "medal.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.purple)
+                    Text("\(ruleManager.userStats.badges.count)")
+                        .font(.system(size: 18, weight: .bold))
+                    Text("Badges")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(16)
+        .background(Color(nsColor: NSColor.windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 8, y: 4)
+    }
+    
+    private var streakCard: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.orange)
+                Text("Current Streak")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+            }
+            
+            HStack(alignment: .bottom, spacing: 4) {
+                Text("\(ruleManager.userStats.currentDayStreak)")
+                    .font(.system(size: 48, weight: .bold))
+                    .foregroundColor(.orange)
+                Text("days")
+                    .font(.system(size: 16))
+                    .foregroundColor(.secondary)
+                    .padding(.bottom, 8)
+            }
+            
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("Best Streak")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Text("\(ruleManager.userStats.longestStreak) days")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing) {
+                    Text("Total Check-ins")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Text("\(ruleManager.userStats.totalRulesCompleted)")
+                        .font(.system(size: 13, weight: .medium))
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            LinearGradient(colors: [.orange.opacity(0.1), .red.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+    
+    // MARK: - Rules Panel
+    private var rulesPanel: some View {
+        VStack(spacing: 0) {
+            // Period tabs and Add button
+            HStack(spacing: 12) {
+                // Period filter tabs
+                HStack(spacing: 4) {
+                    ForEach(0..<4) { index in
+                        let titles = ["All", "Daily", "Weekly", "Monthly"]
+                        let icons = ["list.bullet", "sun.max", "calendar.badge.clock", "calendar"]
+                        let colors: [Color] = [.gray, .orange, .blue, .purple]
+                        
+                        Button {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                selectedPeriod = index
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: icons[index])
+                                    .font(.system(size: 12))
+                                Text(titles[index])
+                                    .font(.system(size: 13, weight: .medium))
+                            }
+                            .foregroundColor(selectedPeriod == index ? .white : colors[index])
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(selectedPeriod == index ? colors[index] : colors[index].opacity(0.1))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                
+                Spacer()
+                
+                // Add Rule button
+                Button {
+                    openAddRuleWindow()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Add Rule")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(
+                        LinearGradient(colors: [.green, .mint], startPoint: .leading, endPoint: .trailing)
+                    )
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(20)
+            .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.3))
+            
+            Divider()
+            
+            // Rules list
+            if filteredRules.isEmpty {
+                emptyState
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(filteredRules) { rule in
+                            FullRuleRow(rule: rule, ruleManager: ruleManager)
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                                    removal: .move(edge: .leading).combined(with: .opacity)
+                                ))
+                        }
+                    }
+                    .padding(20)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: selectedPeriod)
+                }
+            }
+        }
+    }
+    
+    private var emptyState: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            
+            Image(systemName: "book.closed")
+                .font(.system(size: 64))
+                .foregroundColor(.secondary.opacity(0.4))
+            
+            Text("No rules yet")
+                .font(.system(size: 20, weight: .semibold))
+            
+            Text("Create rules to track your daily habits\nand build consistency")
+                .font(.system(size: 14))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            Button {
+                openAddRuleWindow()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Create Your First Rule")
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(colors: [.green, .mint], startPoint: .leading, endPoint: .trailing)
+                )
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    private func openAddRuleWindow() {
+        let contentView = AddRuleWindowContent(ruleManager: ruleManager, userId: authManager.currentUser?.id ?? 0)
+        let hostingController = NSHostingController(rootView: contentView)
+        
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Add Rule"
+        window.styleMask = [.titled, .closable]
+        window.setContentSize(NSSize(width: 400, height: 600))
+        window.center()
+        window.level = .floating
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+// MARK: - Full Rule Row (for full app view)
+struct FullRuleRow: View {
+    let rule: Rule
+    @ObservedObject var ruleManager: RuleManager
+    @State private var isHovered = false
+    @State private var showAnimation = false
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            checkButton
+            ruleInfo
+            Spacer()
+            statusIndicator
+        }
+        .padding(16)
+        .background(rowBackground)
+        .overlay(rowBorder)
+        .scaleEffect(isHovered ? 1.01 : 1.0)
+        .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isHovered)
+        .onHover { isHovered = $0 }
+    }
+    
+    private var checkButton: some View {
+        Button {
+            handleCheck()
+        } label: {
+            ZStack {
+                Circle()
+                    .stroke(rule.color.opacity(0.3), lineWidth: 3)
+                    .frame(width: 48, height: 48)
+                
+                Circle()
+                    .trim(from: 0, to: Double(rule.currentCount) / Double(max(rule.targetCount, 1)))
+                    .stroke(rule.color, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .frame(width: 48, height: 48)
+                    .rotationEffect(.degrees(-90))
+                
+                checkContent
+            }
+        }
+        .buttonStyle(.plain)
+    }
+    
+    @ViewBuilder
+    private var checkContent: some View {
+        if rule.isCompletedForPeriod {
+            Image(systemName: "checkmark")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(rule.color)
+                .scaleEffect(showAnimation ? 1.3 : 1.0)
+        } else {
+            Text("\(rule.currentCount)/\(rule.targetCount)")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(rule.color)
+        }
+    }
+    
+    private var ruleInfo: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ruleTitleRow
+            ruleMetaRow
+        }
+    }
+    
+    private var ruleTitleRow: some View {
+        HStack(spacing: 8) {
+            if let iconName = rule.emoji {
+                Image(systemName: iconName)
+                    .font(.system(size: 16))
+                    .foregroundColor(rule.color)
+            }
+            
+            Text(rule.title)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(rule.isCompletedForPeriod ? .secondary : .primary)
+                .strikethrough(rule.isCompletedForPeriod)
+        }
+    }
+    
+    private var ruleMetaRow: some View {
+        HStack(spacing: 16) {
+            periodBadge
+            streakBadge
+            pointsBadge
+        }
+    }
+    
+    private var periodBadge: some View {
+        HStack(spacing: 4) {
+            Image(systemName: rule.period.icon)
+                .font(.system(size: 11))
+            Text(rule.period.displayName)
+                .font(.system(size: 12))
+        }
+        .foregroundColor(rule.period.color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(rule.period.color.opacity(0.1))
+        .clipShape(Capsule())
+    }
+    
+    @ViewBuilder
+    private var streakBadge: some View {
+        if rule.streakCount > 0 {
+            HStack(spacing: 4) {
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 11))
+                Text("\(rule.streakCount)")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundColor(.orange)
+        }
+    }
+    
+    private var pointsBadge: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 11))
+            Text("+\(10 * rule.period.pointsMultiplier) pts")
+                .font(.system(size: 12))
+        }
+        .foregroundColor(.yellow)
+    }
+    
+    @ViewBuilder
+    private var statusIndicator: some View {
+        if rule.isCompletedForPeriod {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 24))
+                .foregroundColor(.green)
+        }
+    }
+    
+    private var rowBackground: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(Color(nsColor: NSColor.controlBackgroundColor))
+            .shadow(color: isHovered ? .black.opacity(0.1) : .clear, radius: 8, y: 4)
+    }
+    
+    private var rowBorder: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .strokeBorder(rule.isCompletedForPeriod ? Color.green.opacity(0.3) : Color.clear, lineWidth: 2)
+    }
+    
+    private func handleCheck() {
+        guard rule.currentCount < rule.targetCount else { return }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            showAnimation = true
+            ruleManager.incrementRule(rule)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            showAnimation = false
+        }
+    }
+}
 #endif
 
 #Preview {

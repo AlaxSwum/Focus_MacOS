@@ -829,6 +829,7 @@ struct MenuBarDropdownView: View {
     @State private var selectedTab = 0
     @State private var todaySubTab = 0  // 0 = Upcoming, 1 = Completed
     @State private var checklistSubTab = 0  // 0 = To Do, 1 = Rules
+    @State private var selectedRulePeriod = 0  // 0 = All, 1 = Daily, 2 = Weekly, 3 = Monthly
     @State private var selectedMeeting: TaskItem?
     @State private var tabDirection: Int = 0
     @State private var isHoveringFooter = false
@@ -1680,32 +1681,31 @@ extension MenuBarDropdownView {
     // MARK: - Rules Content
     private var rulesContent: some View {
         VStack(spacing: 0) {
-            // Stats header
+            // Stats header with completion percentage
             rulesStatsHeader
+            
+            // Period filter tabs
+            rulesPeriodTabs
             
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    // Daily Rules
-                    if !ruleManager.dailyRules.isEmpty {
-                        ruleSection("Daily Rules", rules: ruleManager.dailyRules, color: .orange)
-                    }
+                    // Filter rules by selected period
+                    let filteredRules = filteredRulesByPeriod
                     
-                    // Weekly Rules
-                    if !ruleManager.weeklyRules.isEmpty {
-                        ruleSection("Weekly Rules", rules: ruleManager.weeklyRules, color: .blue)
-                    }
-                    
-                    // Monthly Rules
-                    if !ruleManager.monthlyRules.isEmpty {
-                        ruleSection("Monthly Rules", rules: ruleManager.monthlyRules, color: .purple)
-                    }
-                    
-                    // Empty state
-                    if ruleManager.rules.isEmpty {
+                    if filteredRules.isEmpty {
                         rulesEmptyState
+                    } else {
+                        ForEach(filteredRules) { rule in
+                            RuleRowView(rule: rule, ruleManager: ruleManager)
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                                    removal: .move(edge: .leading).combined(with: .opacity)
+                                ))
+                        }
                     }
                 }
                 .padding(.horizontal, 12)
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: selectedRulePeriod)
             }
             
             // Add Rule Button
@@ -1737,55 +1737,132 @@ extension MenuBarDropdownView {
         }
     }
     
-    private var rulesStatsHeader: some View {
-        HStack(spacing: 12) {
-            // Points
-            HStack(spacing: 6) {
-                Image(systemName: "star.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.yellow)
-                Text("\(ruleManager.userStats.totalPoints)")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.primary)
+    // Period filter tabs
+    private var rulesPeriodTabs: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<4) { index in
+                let title = ["All", "Daily", "Weekly", "Monthly"][index]
+                let icon = ["list.bullet", "sun.max", "calendar.badge.clock", "calendar"][index]
+                let color: Color = [.gray, .orange, .blue, .purple][index]
+                
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        selectedRulePeriod = index
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: icon)
+                            .font(.system(size: 10))
+                        Text(title)
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(selectedRulePeriod == index ? .white : color)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        selectedRulePeriod == index ? color : color.opacity(0.1)
+                    )
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Color.yellow.opacity(0.15))
-            .clipShape(Capsule())
-            
-            // Level
-            HStack(spacing: 6) {
-                Image(systemName: "trophy.fill")
-                    .font(.system(size: 11))
-                    .foregroundColor(ruleManager.userStats.levelColor)
-                Text("Lv.\(ruleManager.userStats.currentLevel)")
-                    .font(.system(size: 12, weight: .semibold))
-                Text(ruleManager.userStats.levelName)
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(ruleManager.userStats.levelColor.opacity(0.1))
-            .clipShape(Capsule())
-            
-            Spacer()
-            
-            // Streak
-            HStack(spacing: 4) {
-                Image(systemName: "flame.fill")
-                    .font(.system(size: 11))
-                    .foregroundColor(.orange)
-                Text("\(ruleManager.userStats.currentDayStreak)")
-                    .font(.system(size: 12, weight: .bold))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color.orange.opacity(0.15))
-            .clipShape(Capsule())
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+    
+    // Filter rules by selected period
+    private var filteredRulesByPeriod: [Rule] {
+        switch selectedRulePeriod {
+        case 1: return ruleManager.dailyRules
+        case 2: return ruleManager.weeklyRules
+        case 3: return ruleManager.monthlyRules
+        default: return ruleManager.rules
+        }
+    }
+    
+    private var rulesStatsHeader: some View {
+        VStack(spacing: 8) {
+            // Completion percentage bar
+            let completedCount = ruleManager.rules.filter { $0.isCompletedForPeriod }.count
+            let totalCount = max(ruleManager.rules.count, 1)
+            let percentage = Double(completedCount) / Double(totalCount) * 100
+            
+            HStack(spacing: 10) {
+                // Percentage circle
+                ZStack {
+                    Circle()
+                        .stroke(Color.green.opacity(0.2), lineWidth: 4)
+                        .frame(width: 44, height: 44)
+                    Circle()
+                        .trim(from: 0, to: percentage / 100)
+                        .stroke(Color.green, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .frame(width: 44, height: 44)
+                        .rotationEffect(.degrees(-90))
+                    Text("\(Int(percentage))%")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.green)
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Today's Progress")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.secondary)
+                    Text("\(completedCount) of \(ruleManager.rules.count) completed")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                
+                Spacer()
+                
+                // Streak flame
+                HStack(spacing: 4) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.orange)
+                    Text("\(ruleManager.userStats.currentDayStreak)")
+                        .font(.system(size: 14, weight: .bold))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.orange.opacity(0.15))
+                .clipShape(Capsule())
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            
+            // Stats row
+            HStack(spacing: 8) {
+                // Points
+                HStack(spacing: 4) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.yellow)
+                    Text("\(ruleManager.userStats.totalPoints) pts")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.yellow.opacity(0.15))
+                .clipShape(Capsule())
+                
+                // Level
+                HStack(spacing: 4) {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(ruleManager.userStats.levelColor)
+                    Text("Lv.\(ruleManager.userStats.currentLevel)")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(ruleManager.userStats.levelColor.opacity(0.1))
+                .clipShape(Capsule())
+                
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 4)
+        }
     }
     
     private func ruleSection(_ title: String, rules: [Rule], color: Color) -> some View {
@@ -3986,6 +4063,10 @@ struct FullAppWindowView: View {
                     FullMeetingsView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
+                case 2:
+                    FullRuleBookView()
+                        .environmentObject(taskManager)
+                        .environmentObject(authManager)
                 default:
                     FullCalendarView()
                         .environmentObject(taskManager)
@@ -4051,7 +4132,8 @@ struct FullAppWindowView: View {
             // Center section - Tab Selector (prominent)
             HStack(spacing: 4) {
                 tabButton("Personal", icon: "calendar", index: 0)
-                tabButton("Meeting Schedule", icon: "video", index: 1)
+                tabButton("Meetings", icon: "video", index: 1)
+                tabButton("Rule Book", icon: "book.closed", index: 2)
             }
             .padding(4)
             .background(
