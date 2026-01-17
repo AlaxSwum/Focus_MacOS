@@ -182,7 +182,7 @@ struct FocusApp: App {
         .menuBarExtraStyle(.window)
         
         // Full App Window (opened separately)
-        Window("Project Next", id: "full-app") {
+        Window("Focus", id: "full-app") {
             ZStack {
                 FullAppWindowView()
                     .environmentObject(authManager)
@@ -781,7 +781,7 @@ struct MenuBarIconView: View {
     }
 }
 
-// Project Next Logo - loads from app bundle
+// Focus Logo - loads from app bundle
 struct ProjectNextLogo: View {
     var size: CGFloat = 24
     
@@ -789,8 +789,8 @@ struct ProjectNextLogo: View {
         Group {
             if let nsImage = loadAppLogo() {
                 Image(nsImage: nsImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
                     .frame(width: size, height: size)
             } else {
                 // Fallback if file not found
@@ -839,12 +839,12 @@ struct MenuBarDropdownView: View {
     var body: some View {
         ZStack {
             // Main content
-            VStack(spacing: 0) {
-                headerView
-                tabBar
-                contentView
-                footerView
-            }
+        VStack(spacing: 0) {
+            headerView
+            tabBar
+            contentView
+            footerView
+        }
             .opacity(selectedMeeting == nil ? 1 : 0)
             
             // Meeting Details overlay
@@ -871,7 +871,7 @@ struct MenuBarDropdownView: View {
     
     private var headerView: some View {
         HStack(spacing: 10) {
-            // Project Next Logo with pulse animation
+            // Focus Logo with pulse animation
             ZStack {
                 Circle()
                     .fill(Color.accentColor.opacity(0.1))
@@ -880,15 +880,15 @@ struct MenuBarDropdownView: View {
             }
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("Project Next")
+            Text("Focus")
                     .font(.system(size: 14, weight: .bold))
                 Text(Date(), style: .date)
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
             }
-
+            
             Spacer()
-
+            
             // Progress indicator with animation
             let progress = getProgress()
             HStack(spacing: 8) {
@@ -937,7 +937,7 @@ struct MenuBarDropdownView: View {
         .padding(.vertical, 8)
         .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.5))
     }
-
+    
     private func tabButton(_ title: String, icon: String, index: Int) -> some View {
         TabButtonAnimated(
             title: title,
@@ -947,7 +947,7 @@ struct MenuBarDropdownView: View {
                 let oldTab = selectedTab
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                     tabDirection = index > oldTab ? 1 : -1
-                    selectedTab = index
+            selectedTab = index
                 }
             }
         )
@@ -1133,13 +1133,13 @@ extension MenuBarDropdownView {
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: todaySubTab)
             
             // Task list with smooth transition
-            Group {
+        Group {
                 let tasks = todaySubTab == 0 ? upcomingTasks : completedTasks
                 
                 if tasks.isEmpty {
                     emptyStateView(todaySubTab == 0 ? "All caught up!" : "No completed tasks")
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                } else {
+            } else {
                     ForEach(tasks) { task in
                         unifiedTaskRow(task)
                     }
@@ -1156,7 +1156,7 @@ extension MenuBarDropdownView {
     // Unified row style for both tasks and meetings
     private func unifiedTaskRow(_ task: TaskItem) -> some View {
         TaskRowAnimated(task: task, taskManager: taskManager, taskColor: taskColor(task), taskIcon: taskIcon(task)) {
-            if task.type == .meeting {
+                    if task.type == .meeting {
                 selectedMeeting = task
             }
         }
@@ -1554,14 +1554,14 @@ extension MenuBarDropdownView {
                 let time2 = task2.endHour * 60 + task2.endMinute
                 return time1 < time2
             }
-
+            
             if todos.isEmpty {
                 VStack(spacing: 16) {
                     ZStack {
                         Circle()
                             .fill(Color.purple.opacity(0.1))
                             .frame(width: 60, height: 60)
-                        Image(systemName: "checklist")
+                    Image(systemName: "checklist")
                             .font(.system(size: 28))
                             .foregroundColor(.purple.opacity(0.6))
                     }
@@ -1570,7 +1570,7 @@ extension MenuBarDropdownView {
                             .font(.system(size: 14, weight: .semibold))
                         Text("No todo items yet")
                             .font(.system(size: 12))
-                            .foregroundColor(.secondary)
+                        .foregroundColor(.secondary)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1584,9 +1584,9 @@ extension MenuBarDropdownView {
                         ))
                 }
             }
-
+            
             Spacer()
-
+            
             // Add Todo Button at bottom with gradient
             Button {
                 openAddTodoWindow()
@@ -1736,7 +1736,7 @@ extension MenuBarDropdownView {
             .padding(.bottom, 8)
         }
         .sheet(isPresented: $showAddRule) {
-            AddRuleSheet(ruleManager: ruleManager, userId: authManager.currentUser?.id ?? 0)
+            AddRuleSheet(ruleManager: ruleManager, userId: authManager.currentUser?.id ?? 0, isPresented: $showAddRule)
         }
     }
     
@@ -2012,7 +2012,7 @@ extension MenuBarDropdownView {
         let hostingController = NSHostingController(rootView: contentView)
         
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Project Next"
+        window.title = "Focus"
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
         window.setContentSize(NSSize(width: 1400, height: 900))
         window.minSize = NSSize(width: 1200, height: 800)
@@ -2887,12 +2887,12 @@ struct MeetingNotesView: View {
     let onBack: () -> Void
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var taskManager: TaskManager
-
+    
     @State private var isEditing = false
     @State private var isLoading = true
     @State private var isSaving = false
     @State private var existingNotes: MeetingNoteData?
-
+    
     // Meeting Notes Data
     @State private var noteTitle = ""
     @State private var noteDate = ""
@@ -2904,26 +2904,26 @@ struct MeetingNotesView: View {
     @State private var actionItems: [String] = [""]
     @State private var nextSteps: [String] = [""]
     @State private var followUpDate = ""
-
+    
     // Sections
     @State private var discussionSections: [NoteSection] = []
     @State private var decisionSections: [NoteSection] = []
     @State private var actionSections: [NoteSection] = []
     @State private var nextStepSections: [NoteSection] = []
-
+    
     // Section management
     @State private var showAddSection: [String: Bool] = [:]
     @State private var newSectionName: [String: String] = [:]
     @State private var expandedSections: Set<String> = []
-
+    
     private let supabaseURL = "https://bayyefskgflbyyuwrlgm.supabase.co"
     private let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJheXllZnNrZ2ZsYnl5dXdybGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAyNTg0MzAsImV4cCI6MjA2NTgzNDQzMH0.eTr2bOWOO7N7hzRR45qapeQ6V-u2bgV5BbQygZZgGGM"
-
+    
     var body: some View {
         VStack(spacing: 0) {
             // Header
             headerView
-
+            
             if isLoading {
                 loadingView
             } else if isEditing {
@@ -2939,7 +2939,7 @@ struct MeetingNotesView: View {
             loadMeetingNotes()
         }
     }
-
+    
     // MARK: - Header
     private var headerView: some View {
         HStack {
@@ -2949,21 +2949,21 @@ struct MeetingNotesView: View {
                     Text("Back")
                 }
                 .font(.system(size: 13))
-                .foregroundColor(.secondary)
+                    .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
-
+            
             Spacer()
-
+            
             HStack(spacing: 8) {
                 Image(systemName: "doc.text.fill")
                     .font(.system(size: 18))
                 Text("Meeting Notes")
                     .font(.system(size: 18, weight: .bold))
             }
-
+            
             Spacer()
-
+            
             if meeting.meetingLink != nil {
                 Button {
                     if let link = meeting.meetingLink, let url = URL(string: link) {
@@ -3933,7 +3933,7 @@ struct FullAppWindowView: View {
         ZStack {
             Color(nsColor: NSColor.windowBackgroundColor)
                 .ignoresSafeArea()
-
+            
             if authManager.isAuthenticated {
                 mainContent
                     .opacity(isAppearing ? 1 : 0)
@@ -3950,32 +3950,32 @@ struct FullAppWindowView: View {
             }
         }
     }
-
+    
     private var mainContent: some View {
         VStack(spacing: 0) {
             headerBar
-
+            
             // Main content area with smooth transitions
             ZStack {
                 Color(nsColor: NSColor.windowBackgroundColor)
-
+                
                 // Use id to force view recreation for smooth transition
                 Group {
-                    switch selectedTab {
-                    case 0:
-                        FullCalendarView()
-                            .environmentObject(taskManager)
-                            .environmentObject(authManager)
-                    case 1:
-                        FullMeetingsView()
-                            .environmentObject(taskManager)
-                            .environmentObject(authManager)
-                    default:
-                        FullCalendarView()
-                            .environmentObject(taskManager)
-                            .environmentObject(authManager)
-                    }
+                switch selectedTab {
+                case 0:
+                    FullCalendarView()
+                        .environmentObject(taskManager)
+                        .environmentObject(authManager)
+                case 1:
+                    FullMeetingsView()
+                        .environmentObject(taskManager)
+                        .environmentObject(authManager)
+                default:
+                    FullCalendarView()
+                        .environmentObject(taskManager)
+                        .environmentObject(authManager)
                 }
+            }
                 .id(selectedTab)
                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
@@ -3995,32 +3995,32 @@ struct FullAppWindowView: View {
         HStack(spacing: 0) {
             // Left section - Logo and progress
             HStack(spacing: 16) {
-                // Logo
+            // Logo
                 HStack(spacing: 8) {
                     if let nsImage = loadAppLogo() {
                         Image(nsImage: nsImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
                             .frame(width: 24, height: 24)
-                    } else {
-                        Image(systemName: "checkmark.circle.fill")
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 20))
-                            .foregroundColor(.accentColor)
-                    }
-                    
-                    Text("Project Next")
-                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.accentColor)
                 }
                 
+                Text("Focus")
+                        .font(.system(size: 16, weight: .semibold))
+            }
+            
                 // Progress pill
-                let progress = getProgress()
+            let progress = getProgress()
                 HStack(spacing: 8) {
-                    ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
-                        .progressViewStyle(.linear)
+                ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
+                    .progressViewStyle(.linear)
                         .frame(width: 80)
-                        .tint(progress.completed == progress.total ? .green : .accentColor)
-                    
-                    Text("\(progress.completed)/\(progress.total)")
+                    .tint(progress.completed == progress.total ? .green : .accentColor)
+                
+                Text("\(progress.completed)/\(progress.total)")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.secondary)
                 }
@@ -4052,9 +4052,9 @@ struct FullAppWindowView: View {
             
             // Right section - Actions
             HStack(spacing: 12) {
-                Button {
+                    Button {
                     // Add Todo
-                } label: {
+                    } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "checklist")
                             .font(.system(size: 11))
@@ -4066,8 +4066,8 @@ struct FullAppWindowView: View {
                     .padding(.vertical, 6)
                     .background(Color(nsColor: NSColor.controlBackgroundColor))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
+                    }
+                    .buttonStyle(.plain)
                 
                 Button {
                     // Add Task
@@ -4157,7 +4157,7 @@ struct FullAppWindowView: View {
             }
         }
     }
-
+    
     private func getProgress() -> (completed: Int, total: Int) {
         let today = Calendar.current.startOfDay(for: Date())
         let todayTasks = taskManager.todayTasks.filter { Calendar.current.isDate($0.date, inSameDayAs: today) }
@@ -4210,21 +4210,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         // Set up notification delegate
         UNUserNotificationCenter.current().delegate = self
-
+        
         // Request notification permission with completion handler
         requestNotificationPermission()
-
+        
         // Set up notification categories for action buttons
         setupNotificationCategories()
-
+        
         // Start task monitoring (local)
         startTaskMonitoring()
-
+        
         // Schedule notifications after a delay to let tasks load
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             self.scheduleAllTaskNotifications()
         }
-
+        
         // Run as regular app (show in dock with icon)
         NSApp.setActivationPolicy(.regular)
         
@@ -4625,7 +4625,7 @@ class FloatingNotificationManager {
         DispatchQueue.main.async {
             self.dismiss()
             NSSound(named: "Glass")?.play()
-
+            
             let notificationView = FloatingNotificationView(
                 title: title,
                 subtitle: subtitle,
@@ -4637,7 +4637,7 @@ class FloatingNotificationManager {
                 onDismiss: { self.dismiss() },
                 showCloseButton: true  // Always show X button
             )
-
+            
             self.showWindow(with: notificationView, height: 90, duration: duration, hasActions: false)
         }
     }
@@ -4646,11 +4646,11 @@ class FloatingNotificationManager {
         DispatchQueue.main.async {
             self.dismiss()
             NSSound(named: "Glass")?.play()
-
+            
             let timeStr = self.formatTime12Hour(hour: task.startHour, minute: task.startMinute)
             let isNow = minutesBefore == 0
             let message = isNow ? "Starting now!" : "Starting in \(minutesBefore) min • \(timeStr)"
-
+            
             let notificationView = FloatingNotificationView(
                 title: "Task Reminder",
                 subtitle: task.title,
@@ -4671,7 +4671,7 @@ class FloatingNotificationManager {
                 onDismiss: { self.dismiss() },
                 showCloseButton: true
             )
-
+            
             self.showWindow(with: notificationView, height: 140, duration: 30.0, hasActions: true)
         }
     }
@@ -4679,19 +4679,19 @@ class FloatingNotificationManager {
     private func showWindow(with view: FloatingNotificationView, height: CGFloat, duration: TimeInterval, hasActions: Bool = false) {
         let windowWidth: CGFloat = 350  // Match notification width
         let windowHeight: CGFloat = height
-
+        
         let hostingView = NSHostingView(rootView: view)
         hostingView.frame = NSRect(x: 0, y: 0, width: windowWidth, height: windowHeight)
-
+        
         guard let screen = NSScreen.main else { return }
         let screenFrame = screen.visibleFrame
-
+        
         // Start position: off-screen to the right
         let startX = screenFrame.maxX + 20
         // End position: top-right corner
         let endX = screenFrame.maxX - windowWidth - 16
         let windowY = screenFrame.maxY - windowHeight - 8
-
+        
         // Create a floating panel (like system notifications)
         let panel = NSPanel(
             contentRect: NSRect(x: startX, y: windowY, width: windowWidth, height: windowHeight),
@@ -4699,7 +4699,7 @@ class FloatingNotificationManager {
             backing: .buffered,
             defer: false
         )
-
+        
         panel.contentView = hostingView
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -4980,11 +4980,11 @@ struct FloatingNotificationView: View {
                 }
                 .scaleEffect(isAppearing ? 1 : 0.5)
                 .opacity(isAppearing ? 1 : 0)
-                
-                // Content
-                VStack(alignment: .leading, spacing: 6) {
+            
+            // Content
+            VStack(alignment: .leading, spacing: 6) {
                     // Header: Title + Time
-                    HStack(alignment: .top) {
+                HStack(alignment: .top) {
                         Text(title)
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(.primary)
@@ -5016,7 +5016,7 @@ struct FloatingNotificationView: View {
                             Text(message)
                                 .font(.system(size: 12, weight: .medium))
                         }
-                        .foregroundColor(.secondary)
+                            .foregroundColor(.secondary)
                     }
                 }
                 .offset(x: isAppearing ? 0 : 20)
@@ -5104,9 +5104,9 @@ struct FloatingNotificationView: View {
         )
         .overlay(alignment: .topTrailing) {
             if showCloseButton {
-                Button {
-                    onDismiss()
-                } label: {
+                        Button {
+                            onDismiss()
+                        } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.secondary)
@@ -5115,8 +5115,8 @@ struct FloatingNotificationView: View {
                             Circle()
                                 .fill(Color.secondary.opacity(isHovered ? 0.2 : 0.1))
                         )
-                }
-                .buttonStyle(.plain)
+                        }
+                        .buttonStyle(.plain)
                 .padding(10)
                 .onHover { h in isHovered = h }
             }
@@ -5183,7 +5183,7 @@ struct RuleRowView: View {
     var body: some View {
         HStack(spacing: 12) {
             // Progress circle / Check button
-            Button {
+                            Button {
                 if rule.currentCount < rule.targetCount {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                         showCheckAnimation = true
@@ -5193,7 +5193,7 @@ struct RuleRowView: View {
                         showCheckAnimation = false
                     }
                 }
-            } label: {
+                            } label: {
                 ZStack {
                     // Background circle
                     Circle()
@@ -5209,7 +5209,7 @@ struct RuleRowView: View {
                     
                     // Center content
                     if rule.isCompletedForPeriod {
-                        Image(systemName: "checkmark")
+                                    Image(systemName: "checkmark")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(rule.color)
                             .scaleEffect(showCheckAnimation ? 1.3 : 1.0)
@@ -5219,15 +5219,16 @@ struct RuleRowView: View {
                             .foregroundColor(rule.color)
                     }
                 }
-            }
-            .buttonStyle(.plain)
+                            }
+                            .buttonStyle(.plain)
             
             // Rule info
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    if let emoji = rule.emoji {
-                        Text(emoji)
+                    if let iconName = rule.emoji {
+                        Image(systemName: iconName)
                             .font(.system(size: 12))
+                            .foregroundColor(rule.color)
                     }
                     Text(rule.title)
                         .font(.system(size: 13, weight: .medium))
@@ -5303,16 +5304,17 @@ struct RuleRowView: View {
 struct AddRuleSheet: View {
     @ObservedObject var ruleManager: RuleManager
     let userId: Int
-    @Environment(\.dismiss) var dismiss
+    @Binding var isPresented: Bool
     
     @State private var title = ""
     @State private var description = ""
     @State private var selectedPeriod: RulePeriod = .daily
     @State private var targetCount = 1
-    @State private var selectedEmoji = "✅"
+    @State private var selectedIcon = "checkmark.circle"
     @State private var selectedColor: Color = .blue
     
-    let emojis = ["✅", "💪", "🏃", "📚", "💧", "🥗", "😴", "🧘", "💰", "🎯", "⏰", "🚫"]
+    // SF Symbol icons instead of emojis
+    let icons = ["checkmark.circle", "dumbbell", "figure.run", "book", "drop", "leaf", "moon.zzz", "figure.mind.and.body", "dollarsign.circle", "target", "clock", "xmark.circle"]
     let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .yellow, .mint, .cyan, .indigo]
     
     var body: some View {
@@ -5323,7 +5325,7 @@ struct AddRuleSheet: View {
                     .font(.system(size: 18, weight: .bold))
                 Spacer()
                 Button {
-                    dismiss()
+                    isPresented = false
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 22))
@@ -5335,25 +5337,26 @@ struct AddRuleSheet: View {
             
             ScrollView {
                 VStack(spacing: 20) {
-                    // Emoji picker
+                    // Icon picker (SF Symbols instead of emojis)
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Icon")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(.secondary)
                         
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) {
-                            ForEach(emojis, id: \.self) { emoji in
+                            ForEach(icons, id: \.self) { icon in
                                 Button {
-                                    selectedEmoji = emoji
+                                    selectedIcon = icon
                                 } label: {
-                                    Text(emoji)
-                                        .font(.system(size: 24))
+                                    Image(systemName: icon)
+                                        .font(.system(size: 20))
+                                        .foregroundColor(selectedIcon == icon ? selectedColor : .secondary)
                                         .frame(width: 44, height: 44)
-                                        .background(selectedEmoji == emoji ? selectedColor.opacity(0.2) : Color.clear)
+                                        .background(selectedIcon == icon ? selectedColor.opacity(0.2) : Color(nsColor: NSColor.controlBackgroundColor))
                                         .clipShape(RoundedRectangle(cornerRadius: 10))
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 10)
-                                                .strokeBorder(selectedEmoji == emoji ? selectedColor : Color.clear, lineWidth: 2)
+                                                .strokeBorder(selectedIcon == icon ? selectedColor : Color.clear, lineWidth: 2)
                                         )
                                 }
                                 .buttonStyle(.plain)
@@ -5396,8 +5399,8 @@ struct AddRuleSheet: View {
                                     .padding(.vertical, 12)
                                     .background(selectedPeriod == period ? period.color : period.color.opacity(0.1))
                                     .clipShape(RoundedRectangle(cornerRadius: 10))
-                                }
-                                .buttonStyle(.plain)
+                            }
+                            .buttonStyle(.plain)
                             }
                         }
                     }
@@ -5483,11 +5486,11 @@ struct AddRuleSheet: View {
                     description: description.isEmpty ? nil : description,
                     period: selectedPeriod,
                     targetCount: targetCount,
-                    emoji: selectedEmoji,
+                    emoji: selectedIcon,  // Now stores SF Symbol name instead of emoji
                     colorHex: selectedColor.toHex(),
                     userId: userId
                 )
-                dismiss()
+                isPresented = false
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "plus.circle.fill")
@@ -5497,7 +5500,7 @@ struct AddRuleSheet: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(
+        .background(
                     LinearGradient(
                         colors: title.isEmpty ? [Color.gray] : [selectedColor, selectedColor.opacity(0.8)],
                         startPoint: .leading,
