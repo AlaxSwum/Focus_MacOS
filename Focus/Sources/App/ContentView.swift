@@ -5061,7 +5061,8 @@ struct FullRuleBookView: View {
     @EnvironmentObject var taskManager: TaskManager
     @EnvironmentObject var authManager: AuthManager
     @StateObject private var ruleManager = RuleManager.shared
-    @State private var selectedPeriod: Int = 1  // 1 = Daily, 2 = Weekly, 3 = Monthly, 4 = Yearly
+    @State private var selectedPeriod: Int = 1
+    @State private var hoveredPeriod: Int? = nil
     
     private var filteredRules: [Rule] {
         switch selectedPeriod {
@@ -5094,134 +5095,155 @@ struct FullRuleBookView: View {
     }
     
     var body: some View {
-        HStack(spacing: 0) {
-            // Left: Rules list
-            rulesListPanel
-                .frame(maxWidth: .infinity)
-            
-            Divider()
-            
-            // Right: Report panel
-            reportPanel
-                .frame(width: 380)
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                // Left: Rules Section (60%)
+                rulesSection
+                    .frame(width: geometry.size.width * 0.6)
+                
+                // Right: Report Section (40%)
+                reportSection
+                    .frame(width: geometry.size.width * 0.4)
+            }
         }
         .background(Color(nsColor: NSColor.windowBackgroundColor))
     }
     
-    // MARK: - Rules List Panel
-    private var rulesListPanel: some View {
+    // MARK: - Rules Section
+    private var rulesSection: some View {
         VStack(spacing: 0) {
-            // Header with period buttons
-            HStack(spacing: 16) {
-                // Title
-                HStack(spacing: 12) {
-                    Image(systemName: "book.closed.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.green)
-                    Text("Rule Book")
-                        .font(.system(size: 24, weight: .bold))
-                }
-                
-                Spacer()
-                
-                // Add Rule button
-                Button {
-                    openAddRuleWindow()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("Add Rule")
-                            .font(.system(size: 14, weight: .semibold))
+            // Clean Header
+            VStack(spacing: 32) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Rule Book")
+                            .font(.system(size: 34, weight: .bold))
+                        Text("Track your habits and build consistency")
+                            .font(.system(size: 15))
+                            .foregroundColor(.secondary)
                     }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(LinearGradient(colors: [.green, .mint], startPoint: .leading, endPoint: .trailing))
-                    .clipShape(Capsule())
+                    
+                    Spacer()
+                    
+                    Button {
+                        openAddRuleWindow()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("New Rule")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.green)
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                
+                // Period Selector - Large Cards
+                HStack(spacing: 16) {
+                    periodCard("Daily", icon: "sun.max.fill", color: .orange, period: 1)
+                    periodCard("Weekly", icon: "calendar.badge.clock", color: .blue, period: 2)
+                    periodCard("Monthly", icon: "calendar", color: .purple, period: 3)
+                    periodCard("Yearly", icon: "sparkles", color: .pink, period: 4)
+                }
             }
-            .padding(24)
-            .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.5))
+            .padding(40)
+            .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.3))
             
-            // Period filter buttons
-            HStack(spacing: 0) {
-                periodButton("Daily", icon: "sun.max.fill", color: .orange, period: 1)
-                periodButton("Weekly", icon: "calendar.badge.clock", color: .blue, period: 2)
-                periodButton("Monthly", icon: "calendar", color: .purple, period: 3)
-                periodButton("Yearly", icon: "sparkles", color: .pink, period: 4)
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
-            
-            Divider()
-            
-            // Rules list
+            // Rules List
             if filteredRules.isEmpty {
-                emptyRulesState
+                emptyState
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: 16) {
                         ForEach(filteredRules) { rule in
-                            RuleCheckRow(rule: rule, ruleManager: ruleManager)
+                            LargeRuleRow(rule: rule, ruleManager: ruleManager, color: periodColor)
                         }
                     }
-                    .padding(24)
+                    .padding(40)
                 }
             }
         }
     }
     
-    private func periodButton(_ title: String, icon: String, color: Color, period: Int) -> some View {
+    private func periodCard(_ title: String, icon: String, color: Color, period: Int) -> some View {
         let isSelected = selectedPeriod == period
+        let isHovered = hoveredPeriod == period
         let rules = rulesForPeriod(period)
         let completed = rules.filter { $0.isCompletedForPeriod }.count
         let percentage = rules.isEmpty ? 0 : Int(Double(completed) / Double(rules.count) * 100)
         
         return Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                 selectedPeriod = period
             }
         } label: {
-            VStack(spacing: 8) {
-                HStack(spacing: 6) {
+            VStack(spacing: 16) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(color.opacity(isSelected ? 0.2 : 0.1))
+                        .frame(width: 56, height: 56)
+                    
                     Image(systemName: icon)
-                        .font(.system(size: 16))
-                    Text(title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 24))
+                        .foregroundColor(color)
                 }
                 
-                // Progress bar
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(color.opacity(0.2))
-                            .frame(height: 6)
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(color)
-                            .frame(width: geo.size.width * CGFloat(percentage) / 100, height: 6)
+                // Title
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(isSelected ? .primary : .secondary)
+                
+                // Progress
+                VStack(spacing: 8) {
+                    // Progress Ring
+                    ZStack {
+                        Circle()
+                            .stroke(color.opacity(0.15), lineWidth: 4)
+                            .frame(width: 44, height: 44)
+                        
+                        Circle()
+                            .trim(from: 0, to: CGFloat(percentage) / 100)
+                            .stroke(color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .frame(width: 44, height: 44)
+                            .rotationEffect(.degrees(-90))
+                        
+                        Text("\(percentage)%")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(color)
                     }
+                    
+                    Text("\(completed)/\(rules.count)")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
                 }
-                .frame(height: 6)
-                
-                Text("\(completed)/\(rules.count) (\(percentage)%)")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
             }
-            .foregroundColor(isSelected ? color : .secondary)
-            .padding(.vertical, 12)
-            .padding(.horizontal, 16)
             .frame(maxWidth: .infinity)
-            .background(isSelected ? color.opacity(0.15) : Color.clear)
-            .overlay(
-                Rectangle()
-                    .fill(isSelected ? color : Color.clear)
-                    .frame(height: 3),
-                alignment: .bottom
+            .padding(.vertical, 24)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(isSelected ? color.opacity(0.08) : Color(nsColor: NSColor.controlBackgroundColor))
+                    .shadow(color: isSelected ? color.opacity(0.2) : .clear, radius: 8, y: 4)
             )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .strokeBorder(isSelected ? color.opacity(0.4) : Color.clear, lineWidth: 2)
+            )
+            .scaleEffect(isHovered ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.2)) {
+                hoveredPeriod = hovering ? period : nil
+            }
+        }
     }
     
     private func rulesForPeriod(_ period: Int) -> [Rule] {
@@ -5234,256 +5256,274 @@ struct FullRuleBookView: View {
         }
     }
     
-    private var emptyRulesState: some View {
-        VStack(spacing: 20) {
+    private var emptyState: some View {
+        VStack(spacing: 24) {
             Spacer()
-            Image(systemName: "book.closed")
-                .font(.system(size: 64))
-                .foregroundColor(.secondary.opacity(0.4))
-            Text("No \(periodName.lowercased()) rules yet")
-                .font(.system(size: 20, weight: .semibold))
-            Text("Add rules to track your habits")
-                .font(.system(size: 14))
-                .foregroundColor(.secondary)
+            
+            ZStack {
+                Circle()
+                    .fill(periodColor.opacity(0.1))
+                    .frame(width: 120, height: 120)
+                
+                Image(systemName: "book.closed")
+                    .font(.system(size: 48))
+                    .foregroundColor(periodColor.opacity(0.5))
+            }
+            
+            VStack(spacing: 12) {
+                Text("No \(periodName) Rules")
+                    .font(.system(size: 24, weight: .semibold))
+                
+                Text("Create your first \(periodName.lowercased()) rule to start tracking")
+                    .font(.system(size: 15))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            
             Button {
                 openAddRuleWindow()
             } label: {
-                Text("Add Rule")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .background(LinearGradient(colors: [.green, .mint], startPoint: .leading, endPoint: .trailing))
-                    .clipShape(Capsule())
+                HStack(spacing: 8) {
+                    Image(systemName: "plus")
+                    Text("Create Rule")
+                }
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 16)
+                .background(RoundedRectangle(cornerRadius: 12).fill(periodColor))
             }
             .buttonStyle(.plain)
+            
             Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
-    // MARK: - Report Panel
-    private var reportPanel: some View {
+    // MARK: - Report Section
+    private var reportSection: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: 32) {
                 // Report Header
-                HStack {
-                    Image(systemName: "chart.bar.fill")
-                        .font(.system(size: 20))
-                        .foregroundColor(.blue)
-                    Text("Report")
-                        .font(.system(size: 20, weight: .bold))
-                    Spacer()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Progress Report")
+                        .font(.system(size: 28, weight: .bold))
+                    Text("Your habit tracking overview")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 
-                // Overall Progress Circle
-                overallProgressCard
+                // Large Progress Circle
+                progressCircleCard
+                
+                // Stats Grid
+                statsGrid
                 
                 // Period Breakdown
-                periodBreakdownCard
+                periodBreakdown
                 
-                // Gamification Stats
-                gamificationCard
-                
-                // Streak Info
+                // Streak Card
                 streakCard
             }
-            .padding(24)
+            .padding(40)
         }
         .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.5))
     }
     
-    private var overallProgressCard: some View {
+    private var progressCircleCard: some View {
         let total = ruleManager.rules.count
         let completed = ruleManager.rules.filter { $0.isCompletedForPeriod }.count
         let percentage = total > 0 ? Double(completed) / Double(total) * 100 : 0
         
-        return VStack(spacing: 16) {
-            Text("Overall Progress")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            
+        return VStack(spacing: 24) {
             ZStack {
+                // Background Circle
                 Circle()
-                    .stroke(Color.green.opacity(0.2), lineWidth: 12)
-                    .frame(width: 140, height: 140)
+                    .stroke(Color.green.opacity(0.1), lineWidth: 20)
+                    .frame(width: 200, height: 200)
                 
+                // Progress Circle
                 Circle()
                     .trim(from: 0, to: percentage / 100)
                     .stroke(
                         LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                        style: StrokeStyle(lineWidth: 20, lineCap: .round)
                     )
-                    .frame(width: 140, height: 140)
+                    .frame(width: 200, height: 200)
                     .rotationEffect(.degrees(-90))
+                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: percentage)
                 
-                VStack(spacing: 4) {
+                // Center Content
+                VStack(spacing: 8) {
                     Text("\(Int(percentage))%")
-                        .font(.system(size: 36, weight: .bold))
+                        .font(.system(size: 52, weight: .bold))
                         .foregroundColor(.green)
-                    Text("\(completed)/\(total)")
+                    
+                    Text("\(completed) of \(total)")
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            // Status Message
+            Text(percentage == 100 ? "Perfect! All rules completed" : percentage >= 75 ? "Almost there! Keep going" : percentage >= 50 ? "Halfway done! Nice progress" : "Let's build some habits!")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(percentage >= 50 ? .green : .orange)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule()
+                        .fill((percentage >= 50 ? Color.green : Color.orange).opacity(0.1))
+                )
+        }
+        .frame(maxWidth: .infinity)
+        .padding(32)
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color(nsColor: NSColor.windowBackgroundColor))
+        )
+    }
+    
+    private var statsGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+            statCard("Points", value: "\(ruleManager.userStats.totalPoints)", icon: "star.fill", color: .yellow)
+            statCard("Level", value: "Lv.\(ruleManager.userStats.currentLevel)", icon: "trophy.fill", color: ruleManager.userStats.levelColor)
+            statCard("Badges", value: "\(ruleManager.userStats.badges.count)", icon: "medal.fill", color: .purple)
+            statCard("Check-ins", value: "\(ruleManager.userStats.totalRulesCompleted)", icon: "checkmark.circle.fill", color: .green)
+        }
+    }
+    
+    private func statCard(_ title: String, value: String, icon: String, color: Color) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 28))
+                .foregroundColor(color)
+            
+            Text(value)
+                .font(.system(size: 24, weight: .bold))
+            
+            Text(title)
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(nsColor: NSColor.windowBackgroundColor))
+        )
+    }
+    
+    private var periodBreakdown: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("By Period")
+                .font(.system(size: 18, weight: .semibold))
+            
+            VStack(spacing: 16) {
+                breakdownRow("Daily", rules: ruleManager.dailyRules, color: .orange, icon: "sun.max.fill")
+                breakdownRow("Weekly", rules: ruleManager.weeklyRules, color: .blue, icon: "calendar.badge.clock")
+                breakdownRow("Monthly", rules: ruleManager.monthlyRules, color: .purple, icon: "calendar")
+                breakdownRow("Yearly", rules: ruleManager.yearlyRules, color: .pink, icon: "sparkles")
+            }
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(nsColor: NSColor.windowBackgroundColor))
+        )
+    }
+    
+    private func breakdownRow(_ title: String, rules: [Rule], color: Color, icon: String) -> some View {
+        let completed = rules.filter { $0.isCompletedForPeriod }.count
+        let percentage = rules.isEmpty ? 0 : Double(completed) / Double(rules.count) * 100
+        
+        return HStack(spacing: 16) {
+            // Icon
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.15))
+                    .frame(width: 40, height: 40)
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundColor(color)
+            }
+            
+            // Title & Progress
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(title)
+                        .font(.system(size: 15, weight: .medium))
+                    Spacer()
+                    Text("\(completed)/\(rules.count)")
                         .font(.system(size: 14))
                         .foregroundColor(.secondary)
                 }
+                
+                // Progress Bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(color.opacity(0.15))
+                            .frame(height: 8)
+                        
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(color)
+                            .frame(width: geo.size.width * CGFloat(percentage) / 100, height: 8)
+                    }
+                }
+                .frame(height: 8)
             }
             
-            Text(percentage == 100 ? "All complete!" : percentage >= 50 ? "Great progress!" : "Keep going!")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(percentage >= 50 ? .green : .orange)
-        }
-        .padding(20)
-        .background(Color(nsColor: NSColor.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
-    
-    private var periodBreakdownCard: some View {
-        VStack(spacing: 16) {
-            Text("By Period")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            
-            VStack(spacing: 12) {
-                periodRow("Daily", rules: ruleManager.dailyRules, color: .orange, icon: "sun.max.fill")
-                periodRow("Weekly", rules: ruleManager.weeklyRules, color: .blue, icon: "calendar.badge.clock")
-                periodRow("Monthly", rules: ruleManager.monthlyRules, color: .purple, icon: "calendar")
-                periodRow("Yearly", rules: ruleManager.yearlyRules, color: .pink, icon: "sparkles")
-            }
-        }
-        .padding(20)
-        .background(Color(nsColor: NSColor.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
-    
-    private func periodRow(_ title: String, rules: [Rule], color: Color, icon: String) -> some View {
-        let completed = rules.filter { $0.isCompletedForPeriod }.count
-        let percentage = rules.isEmpty ? 0 : Int(Double(completed) / Double(rules.count) * 100)
-        
-        return HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
+            // Percentage
+            Text("\(Int(percentage))%")
+                .font(.system(size: 15, weight: .bold))
                 .foregroundColor(color)
-                .frame(width: 24)
-            
-            Text(title)
-                .font(.system(size: 14, weight: .medium))
-            
-            Spacer()
-            
-            // Mini progress bar
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(color.opacity(0.2))
-                        .frame(height: 8)
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(color)
-                        .frame(width: geo.size.width * CGFloat(percentage) / 100, height: 8)
-                }
-            }
-            .frame(width: 80, height: 8)
-            
-            Text("\(percentage)%")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(color)
-                .frame(width: 40, alignment: .trailing)
+                .frame(width: 50, alignment: .trailing)
         }
-    }
-    
-    private var gamificationCard: some View {
-        VStack(spacing: 16) {
-            Text("Gamification")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            
-            HStack(spacing: 0) {
-                // Points
-                VStack(spacing: 6) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.yellow)
-                    Text("\(ruleManager.userStats.totalPoints)")
-                        .font(.system(size: 20, weight: .bold))
-                    Text("Points")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                
-                Divider().frame(height: 50)
-                
-                // Level
-                VStack(spacing: 6) {
-                    Image(systemName: "trophy.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(ruleManager.userStats.levelColor)
-                    Text("Lv.\(ruleManager.userStats.currentLevel)")
-                        .font(.system(size: 20, weight: .bold))
-                    Text(ruleManager.userStats.levelName)
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                
-                Divider().frame(height: 50)
-                
-                // Badges
-                VStack(spacing: 6) {
-                    Image(systemName: "medal.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.purple)
-                    Text("\(ruleManager.userStats.badges.count)")
-                        .font(.system(size: 20, weight: .bold))
-                    Text("Badges")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(20)
-        .background(Color(nsColor: NSColor.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
     
     private var streakCard: some View {
-        VStack(spacing: 12) {
-            HStack {
+        HStack(spacing: 24) {
+            // Flame Icon
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(colors: [.orange, .red], startPoint: .top, endPoint: .bottom)
+                    )
+                    .frame(width: 72, height: 72)
+                
                 Image(systemName: "flame.fill")
-                    .font(.system(size: 18))
-                    .foregroundColor(.orange)
-                Text("Streak")
-                    .font(.system(size: 14, weight: .semibold))
-                Spacer()
+                    .font(.system(size: 32))
+                    .foregroundColor(.white)
             }
             
-            HStack(alignment: .bottom, spacing: 4) {
-                Text("\(ruleManager.userStats.currentDayStreak)")
-                    .font(.system(size: 48, weight: .bold))
-                    .foregroundColor(.orange)
-                Text("days")
-                    .font(.system(size: 16))
-                    .foregroundColor(.secondary)
-                    .padding(.bottom, 8)
-                
-                Spacer()
-                
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("Best: \(ruleManager.userStats.longestStreak) days")
-                        .font(.system(size: 12))
+            // Streak Info
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .bottom, spacing: 8) {
+                    Text("\(ruleManager.userStats.currentDayStreak)")
+                        .font(.system(size: 44, weight: .bold))
+                        .foregroundColor(.orange)
+                    Text("day streak")
+                        .font(.system(size: 18))
                         .foregroundColor(.secondary)
-                    Text("Total: \(ruleManager.userStats.totalRulesCompleted) check-ins")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                        .padding(.bottom, 6)
                 }
+                
+                Text("Best: \(ruleManager.userStats.longestStreak) days")
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
             }
+            
+            Spacer()
         }
-        .padding(20)
+        .padding(28)
         .background(
-            LinearGradient(colors: [.orange.opacity(0.15), .red.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            RoundedRectangle(cornerRadius: 20)
+                .fill(
+                    LinearGradient(colors: [.orange.opacity(0.15), .red.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
     
     private func openAddRuleWindow() {
@@ -5493,11 +5533,138 @@ struct FullRuleBookView: View {
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Add Rule"
         window.styleMask = [.titled, .closable]
-        window.setContentSize(NSSize(width: 400, height: 600))
+        window.setContentSize(NSSize(width: 450, height: 650))
         window.center()
         window.level = .floating
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+// MARK: - Large Rule Row
+struct LargeRuleRow: View {
+    let rule: Rule
+    @ObservedObject var ruleManager: RuleManager
+    let color: Color
+    @State private var isHovered = false
+    @State private var showCompletion = false
+    
+    var body: some View {
+        Button {
+            if !rule.isCompletedForPeriod {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                    showCompletion = true
+                }
+                ruleManager.incrementRule(rule)
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    withAnimation {
+                        showCompletion = false
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 24) {
+                // Large Checkbox
+                ZStack {
+                    Circle()
+                        .strokeBorder(rule.isCompletedForPeriod ? color : Color.secondary.opacity(0.3), lineWidth: 3)
+                        .frame(width: 48, height: 48)
+                    
+                    if rule.isCompletedForPeriod || showCompletion {
+                        Circle()
+                            .fill(color)
+                            .frame(width: 40, height: 40)
+                            .overlay(
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundColor(.white)
+                            )
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                
+                // Rule Content
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(rule.title)
+                        .font(.system(size: 18, weight: .semibold))
+                        .strikethrough(rule.isCompletedForPeriod, color: .secondary)
+                        .foregroundColor(rule.isCompletedForPeriod ? .secondary : .primary)
+                    
+                    if let description = rule.description, !description.isEmpty {
+                        Text(description)
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    
+                    // Progress & Streak
+                    HStack(spacing: 16) {
+                        if rule.targetCount > 1 {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 12))
+                                Text("\(rule.currentCount)/\(rule.targetCount)")
+                                    .font(.system(size: 13, weight: .medium))
+                            }
+                            .foregroundColor(color)
+                        }
+                        
+                        if rule.streakCount > 0 {
+                            HStack(spacing: 4) {
+                                Image(systemName: "flame.fill")
+                                    .font(.system(size: 12))
+                                Text("\(rule.streakCount)")
+                                    .font(.system(size: 13, weight: .medium))
+                            }
+                            .foregroundColor(.orange)
+                        }
+                        
+                        HStack(spacing: 4) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 12))
+                            Text("+\(rule.pointsForCompletion)")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                        .foregroundColor(.yellow)
+                    }
+                }
+                
+                Spacer()
+                
+                // Status
+                if rule.isCompletedForPeriod {
+                    Text("Done")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.green.opacity(0.15))
+                        .clipShape(Capsule())
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary.opacity(0.5))
+                }
+            }
+            .padding(24)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color(nsColor: NSColor.controlBackgroundColor))
+                    .shadow(color: isHovered ? color.opacity(0.15) : .black.opacity(0.05), radius: isHovered ? 12 : 4, y: isHovered ? 6 : 2)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .strokeBorder(rule.isCompletedForPeriod ? color.opacity(0.3) : Color.clear, lineWidth: 2)
+            )
+            .scaleEffect(isHovered && !rule.isCompletedForPeriod ? 1.01 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.2)) {
+                isHovered = hovering
+            }
+        }
     }
 }
 
