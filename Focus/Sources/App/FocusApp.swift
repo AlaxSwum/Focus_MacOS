@@ -834,7 +834,7 @@ struct MenuBarDropdownView: View {
     @State private var isHoveringFooter = false
     @State private var subTabDirection: Int = 0
     @State private var footerPressed = false
-    @State private var showAddRule = false
+    // showAddRule removed - now uses floating window
     
     var body: some View {
         ZStack {
@@ -1710,7 +1710,7 @@ extension MenuBarDropdownView {
             
             // Add Rule Button
             Button {
-                showAddRule = true
+                openAddRuleWindow()
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "plus.circle.fill")
@@ -1734,9 +1734,6 @@ extension MenuBarDropdownView {
             .buttonStyle(.plain)
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
-        }
-        .sheet(isPresented: $showAddRule) {
-            AddRuleSheet(ruleManager: ruleManager, userId: authManager.currentUser?.id ?? 0, isPresented: $showAddRule)
         }
     }
     
@@ -1835,20 +1832,39 @@ extension MenuBarDropdownView {
     }
     
     private func openAddTodoWindow() {
-        // Create a new window programmatically for Add Todo
+        // Create a new floating window for Add Todo
         let contentView = MenuBarAddTodoSheet()
             .environmentObject(TaskManager.shared)
             .environmentObject(AuthManager.shared)
 
         let hostingController = NSHostingController(rootView: contentView)
 
-        // Create a proper window
-        let window = AddTodoWindow(contentViewController: hostingController)
+        // Create floating window that stays above all apps
+        let window = FloatingAppWindow(contentViewController: hostingController)
         window.title = "Add Todo"
         window.styleMask = [.titled, .closable]
         window.setContentSize(NSSize(width: 400, height: 520))
         window.center()
         window.level = .floating
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    
+    private func openAddRuleWindow() {
+        // Create a new floating window for Add Rule
+        let contentView = AddRuleWindowContent(ruleManager: ruleManager, userId: authManager.currentUser?.id ?? 0)
+        
+        let hostingController = NSHostingController(rootView: contentView)
+        
+        // Create floating window that stays above all apps
+        let window = FloatingAppWindow(contentViewController: hostingController)
+        window.title = "Add Rule"
+        window.styleMask = [.titled, .closable]
+        window.setContentSize(NSSize(width: 400, height: 600))
+        window.center()
+        window.level = .floating
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -4167,31 +4183,16 @@ struct FullAppWindowView: View {
     }
 }
 
-// MARK: - Custom Window for Add Todo
-class AddTodoWindow: NSWindow {
-    private var clickMonitor: Any?
-    
+// MARK: - Custom Floating Window (stays visible above all apps including full screen)
+class FloatingAppWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
     
     override func makeKeyAndOrderFront(_ sender: Any?) {
         super.makeKeyAndOrderFront(sender)
-        
-        // Monitor for clicks outside this window
-        clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            guard let self = self else { return }
-            // Close when clicking outside
-            self.close()
-        }
-    }
-    
-    override func close() {
-        // Remove the click monitor when closing
-        if let monitor = clickMonitor {
-            NSEvent.removeMonitor(monitor)
-            clickMonitor = nil
-        }
-        super.close()
+        // Set to floating level that appears above full-screen apps
+        self.level = .floating
+        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     }
 }
 #endif
@@ -5515,6 +5516,228 @@ struct AddRuleSheet: View {
         }
         .frame(width: 400, height: 600)
         .background(Color(nsColor: NSColor.windowBackgroundColor))
+    }
+}
+
+// MARK: - Add Rule Window Content (for floating window)
+struct AddRuleWindowContent: View {
+    @ObservedObject var ruleManager: RuleManager
+    let userId: Int
+    
+    @State private var title = ""
+    @State private var description = ""
+    @State private var selectedPeriod: RulePeriod = .daily
+    @State private var targetCount = 1
+    @State private var selectedIcon = "checkmark.circle"
+    @State private var selectedColor: Color = .blue
+    
+    // SF Symbol icons
+    let icons = ["checkmark.circle", "dumbbell", "figure.run", "book", "drop", "leaf", "moon.zzz", "figure.mind.and.body", "dollarsign.circle", "target", "clock", "xmark.circle"]
+    let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .yellow, .mint, .cyan, .indigo]
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("New Rule")
+                    .font(.system(size: 18, weight: .bold))
+                Spacer()
+                Button {
+                    closeWindow()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(20)
+            
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Icon picker
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Icon")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) {
+                            ForEach(icons, id: \.self) { icon in
+                                Button {
+                                    selectedIcon = icon
+                                } label: {
+                                    Image(systemName: icon)
+                                        .font(.system(size: 20))
+                                        .foregroundColor(selectedIcon == icon ? selectedColor : .secondary)
+                                        .frame(width: 44, height: 44)
+                                        .background(selectedIcon == icon ? selectedColor.opacity(0.2) : Color(nsColor: NSColor.controlBackgroundColor))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .strokeBorder(selectedIcon == icon ? selectedColor : Color.clear, lineWidth: 2)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    
+                    // Title
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Rule Title")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        
+                        TextField("e.g., No soda, Go to gym", text: $title)
+                            .textFieldStyle(.plain)
+                            .padding(12)
+                            .background(Color(nsColor: NSColor.controlBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    
+                    // Period selection
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Frequency")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        
+                        HStack(spacing: 8) {
+                            ForEach(RulePeriod.allCases, id: \.self) { period in
+                                Button {
+                                    selectedPeriod = period
+                                } label: {
+                                    VStack(spacing: 4) {
+                                        Image(systemName: period.icon)
+                                            .font(.system(size: 16))
+                                        Text(period.displayName)
+                                            .font(.system(size: 10, weight: .medium))
+                                    }
+                                    .foregroundColor(selectedPeriod == period ? .white : period.color)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(selectedPeriod == period ? period.color : period.color.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    
+                    // Target count
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Target (times per \(selectedPeriod.displayName.lowercased()))")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        
+                        HStack(spacing: 16) {
+                            Button {
+                                if targetCount > 1 { targetCount -= 1 }
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            
+                            Text("\(targetCount)")
+                                .font(.system(size: 32, weight: .bold))
+                                .frame(width: 60)
+                            
+                            Button {
+                                targetCount += 1
+                            } label: {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(selectedColor)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    
+                    // Color picker
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Color")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        
+                        HStack(spacing: 8) {
+                            ForEach(colors, id: \.self) { color in
+                                Button {
+                                    selectedColor = color
+                                } label: {
+                                    Circle()
+                                        .fill(color)
+                                        .frame(width: 30, height: 30)
+                                        .overlay(
+                                            Circle()
+                                                .strokeBorder(selectedColor == color ? Color.white : Color.clear, lineWidth: 3)
+                                        )
+                                        .shadow(color: selectedColor == color ? color.opacity(0.5) : .clear, radius: 4)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    
+                    // Points preview
+                    HStack {
+                        Image(systemName: "star.fill")
+                            .foregroundColor(.yellow)
+                        Text("Earn \(10 * selectedPeriod.pointsMultiplier) pts per check, +\(selectedPeriod.pointsMultiplier * 10) bonus on completion")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.yellow.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .padding(.horizontal, 20)
+            }
+            
+            // Add button
+            Button {
+                guard !title.isEmpty else { return }
+                ruleManager.addRule(
+                    title: title,
+                    description: description.isEmpty ? nil : description,
+                    period: selectedPeriod,
+                    targetCount: targetCount,
+                    emoji: selectedIcon,
+                    colorHex: selectedColor.toHex(),
+                    userId: userId
+                )
+                closeWindow()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Create Rule")
+                        .font(.system(size: 15, weight: .bold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(
+                        colors: title.isEmpty ? [Color.gray] : [selectedColor, selectedColor.opacity(0.8)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            .disabled(title.isEmpty)
+            .padding(20)
+        }
+        .frame(width: 400, height: 600)
+        .background(Color(nsColor: NSColor.windowBackgroundColor))
+    }
+    
+    private func closeWindow() {
+        // Close the hosting window
+        NSApp.keyWindow?.close()
     }
 }
 
