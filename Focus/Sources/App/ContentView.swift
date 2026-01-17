@@ -5801,6 +5801,1070 @@ struct FullRuleRow: View {
         }
     }
 }
+
+// MARK: - Full Journal View
+struct FullJournalView: View {
+    @EnvironmentObject var taskManager: TaskManager
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var journalManager = JournalManager.shared
+    @StateObject private var ruleManager = RuleManager.shared
+    
+    @State private var viewMode: Int = 0  // 0 = Normal, 1 = Calendar
+    @State private var selectedDate = Date()
+    @State private var currentEntry: JournalEntry?
+    @State private var showEditor = false
+    @State private var currentMonth = Date()
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            journalHeader
+            
+            // View mode tabs
+            viewModeTabs
+            
+            // Content
+            if viewMode == 0 {
+                normalView
+            } else {
+                calendarView
+            }
+        }
+        .background(Color(nsColor: NSColor.windowBackgroundColor))
+        .sheet(isPresented: $showEditor) {
+            if let entry = currentEntry {
+                JournalEditorView(
+                    entry: Binding(
+                        get: { entry },
+                        set: { currentEntry = $0 }
+                    ),
+                    journalManager: journalManager,
+                    taskManager: taskManager,
+                    ruleManager: ruleManager
+                )
+            }
+        }
+        .onAppear {
+            loadTodayEntry()
+        }
+    }
+    
+    private func loadTodayEntry() {
+        if let userId = authManager.currentUser?.id {
+            currentEntry = journalManager.getTodayEntry(userId: userId)
+        }
+    }
+    
+    // MARK: - Header
+    private var journalHeader: some View {
+        HStack(spacing: 16) {
+            // Title
+            HStack(spacing: 12) {
+                Image(systemName: "book.pages.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.purple)
+                Text("Daily Journal")
+                    .font(.system(size: 28, weight: .bold))
+            }
+            
+            Spacer()
+            
+            // Stats
+            HStack(spacing: 16) {
+                // Streak
+                HStack(spacing: 6) {
+                    Image(systemName: "flame.fill")
+                        .foregroundColor(.orange)
+                    Text("\(journalManager.stats.currentStreak) day streak")
+                        .font(.system(size: 14, weight: .medium))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.15))
+                .clipShape(Capsule())
+                
+                // Total entries
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.text.fill")
+                        .foregroundColor(.blue)
+                    Text("\(journalManager.stats.totalEntries) entries")
+                        .font(.system(size: 14, weight: .medium))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.blue.opacity(0.15))
+                .clipShape(Capsule())
+                
+                // Points
+                HStack(spacing: 6) {
+                    Image(systemName: "star.fill")
+                        .foregroundColor(.yellow)
+                    Text("\(journalManager.stats.totalPoints) pts")
+                        .font(.system(size: 14, weight: .medium))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.yellow.opacity(0.15))
+                .clipShape(Capsule())
+            }
+            
+            // Write Today button
+            Button {
+                if let userId = authManager.currentUser?.id {
+                    currentEntry = journalManager.getTodayEntry(userId: userId)
+                    showEditor = true
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "pencil.line")
+                        .font(.system(size: 12, weight: .bold))
+                    Text("Write Today")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(24)
+        .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.5))
+    }
+    
+    // MARK: - View Mode Tabs
+    private var viewModeTabs: some View {
+        HStack(spacing: 8) {
+            Button {
+                withAnimation { viewMode = 0 }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "list.bullet")
+                    Text("Entries")
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(viewMode == 0 ? .white : .secondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(viewMode == 0 ? Color.purple : Color.clear)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            
+            Button {
+                withAnimation { viewMode = 1 }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar")
+                    Text("Calendar")
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(viewMode == 1 ? .white : .secondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(viewMode == 1 ? Color.purple : Color.clear)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            
+            Spacer()
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 12)
+        .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.3))
+    }
+    
+    // MARK: - Normal View (List)
+    private var normalView: some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                // Today's entry card (prominent)
+                if let todayEntry = journalManager.getEntryForDate(Date()) {
+                    todayEntryCard(todayEntry)
+                } else {
+                    emptyTodayCard
+                }
+                
+                // Past entries
+                let pastEntries = journalManager.entries
+                    .filter { !Calendar.current.isDateInToday($0.date) }
+                    .sorted { $0.date > $1.date }
+                
+                if !pastEntries.isEmpty {
+                    Text("Past Entries")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 16)
+                    
+                    ForEach(pastEntries) { entry in
+                        entryCard(entry)
+                    }
+                }
+            }
+            .padding(24)
+        }
+    }
+    
+    private func todayEntryCard(_ entry: JournalEntry) -> some View {
+        Button {
+            currentEntry = entry
+            showEditor = true
+        } label: {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Today")
+                            .font(.system(size: 24, weight: .bold))
+                        Text(entry.date.formatted(date: .complete, time: .omitted))
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    // Completion circle
+                    ZStack {
+                        Circle()
+                            .stroke(Color.purple.opacity(0.2), lineWidth: 6)
+                            .frame(width: 60, height: 60)
+                        Circle()
+                            .trim(from: 0, to: entry.completionPercentage / 100)
+                            .stroke(Color.purple, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                            .frame(width: 60, height: 60)
+                            .rotationEffect(.degrees(-90))
+                        Text("\(Int(entry.completionPercentage))%")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.purple)
+                    }
+                }
+                
+                // Preview of content
+                if !entry.topOutcomes.filter({ !$0.isEmpty }).isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Top Outcomes")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        ForEach(entry.topOutcomes.filter { !$0.isEmpty }, id: \.self) { outcome in
+                            HStack(spacing: 8) {
+                                Image(systemName: "target")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.purple)
+                                Text(outcome)
+                                    .font(.system(size: 14))
+                            }
+                        }
+                    }
+                }
+                
+                HStack {
+                    Text("Click to continue writing...")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(24)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(LinearGradient(colors: [Color.purple.opacity(0.1), Color.pink.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Color.purple.opacity(0.3), lineWidth: 2)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private var emptyTodayCard: some View {
+        Button {
+            if let userId = authManager.currentUser?.id {
+                currentEntry = journalManager.getTodayEntry(userId: userId)
+                showEditor = true
+            }
+        } label: {
+            VStack(spacing: 20) {
+                Image(systemName: "pencil.and.outline")
+                    .font(.system(size: 48))
+                    .foregroundColor(.purple.opacity(0.5))
+                
+                Text("Start Today's Journal")
+                    .font(.system(size: 20, weight: .semibold))
+                
+                Text("Reflect on your day, track your progress,\nand grow with every entry")
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                
+                Text("Begin Writing")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing))
+                    .clipShape(Capsule())
+            }
+            .padding(40)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(nsColor: NSColor.controlBackgroundColor))
+                    .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private func entryCard(_ entry: JournalEntry) -> some View {
+        Button {
+            currentEntry = entry
+            showEditor = true
+        } label: {
+            HStack(spacing: 16) {
+                // Date
+                VStack(spacing: 4) {
+                    Text(entry.date.formatted(.dateTime.day()))
+                        .font(.system(size: 24, weight: .bold))
+                    Text(entry.date.formatted(.dateTime.month(.abbreviated)))
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+                .frame(width: 50)
+                
+                Divider()
+                    .frame(height: 40)
+                
+                // Content preview
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.biggestWin.isEmpty ? "Journal Entry" : entry.biggestWin)
+                        .font(.system(size: 16, weight: .medium))
+                        .lineLimit(1)
+                    
+                    HStack(spacing: 8) {
+                        if !entry.dominantEmotion.isEmpty {
+                            Text(entry.dominantEmotion)
+                                .font(.system(size: 12))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Color.blue.opacity(0.1))
+                                .clipShape(Capsule())
+                        }
+                        Text("\(Int(entry.completionPercentage))% complete")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                // Completion indicator
+                Circle()
+                    .fill(entry.completionPercentage >= 50 ? Color.green : Color.orange)
+                    .frame(width: 12, height: 12)
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(nsColor: NSColor.controlBackgroundColor))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - Calendar View
+    private var calendarView: some View {
+        HStack(spacing: 0) {
+            // Calendar
+            VStack(spacing: 16) {
+                // Month navigation
+                HStack {
+                    Button {
+                        currentMonth = Calendar.current.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Spacer()
+                    
+                    Text(currentMonth.formatted(.dateTime.month(.wide).year()))
+                        .font(.system(size: 18, weight: .semibold))
+                    
+                    Spacer()
+                    
+                    Button {
+                        currentMonth = Calendar.current.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal)
+                
+                // Weekday headers
+                let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+                HStack(spacing: 0) {
+                    ForEach(weekdays, id: \.self) { day in
+                        Text(day)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                
+                // Calendar grid
+                let days = calendarDays()
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 8) {
+                    ForEach(days, id: \.self) { date in
+                        calendarDayCell(date)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(24)
+            .frame(width: 400)
+            .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.5))
+            
+            Divider()
+            
+            // Selected day preview
+            VStack(spacing: 16) {
+                Text(selectedDate.formatted(date: .complete, time: .omitted))
+                    .font(.system(size: 20, weight: .bold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                
+                if let entry = journalManager.getEntryForDate(selectedDate) {
+                    entryPreview(entry)
+                } else {
+                    noEntryView
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity)
+        }
+    }
+    
+    private func calendarDays() -> [Date] {
+        let calendar = Calendar.current
+        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: currentMonth))!
+        let range = calendar.range(of: .day, in: .month, for: startOfMonth)!
+        
+        var days: [Date] = []
+        
+        // Add padding for first week
+        let firstWeekday = calendar.component(.weekday, from: startOfMonth)
+        for _ in 1..<firstWeekday {
+            days.append(Date.distantPast)
+        }
+        
+        // Add days of month
+        for day in range {
+            if let date = calendar.date(byAdding: .day, value: day - 1, to: startOfMonth) {
+                days.append(date)
+            }
+        }
+        
+        return days
+    }
+    
+    private func calendarDayCell(_ date: Date) -> some View {
+        let calendar = Calendar.current
+        let isValidDate = date != Date.distantPast
+        let isToday = calendar.isDateInToday(date)
+        let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
+        let hasEntry = isValidDate && journalManager.hasEntryForDate(date)
+        let completion = journalManager.completionForDate(date)
+        
+        return Button {
+            if isValidDate {
+                selectedDate = date
+            }
+        } label: {
+            ZStack {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.purple)
+                }
+                
+                VStack(spacing: 4) {
+                    if isValidDate {
+                        Text("\(calendar.component(.day, from: date))")
+                            .font(.system(size: 14, weight: isToday ? .bold : .regular))
+                            .foregroundColor(isSelected ? .white : (isToday ? .purple : .primary))
+                        
+                        if hasEntry {
+                            Circle()
+                                .fill(completion >= 50 ? Color.green : Color.orange)
+                                .frame(width: 6, height: 6)
+                        }
+                    }
+                }
+            }
+            .frame(height: 44)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isValidDate)
+    }
+    
+    private func entryPreview(_ entry: JournalEntry) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // Completion
+                HStack {
+                    Text("Completion")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(Int(entry.completionPercentage))%")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(entry.completionPercentage >= 50 ? .green : .orange)
+                }
+                
+                Divider()
+                
+                // Biggest win
+                if !entry.biggestWin.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Biggest Win")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Text(entry.biggestWin)
+                            .font(.system(size: 14))
+                    }
+                }
+                
+                // Dominant emotion
+                if !entry.dominantEmotion.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Dominant Emotion")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Text(entry.dominantEmotion)
+                            .font(.system(size: 14))
+                    }
+                }
+                
+                // Learning
+                if !entry.oneLearned.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("One Thing Learned")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Text(entry.oneLearned)
+                            .font(.system(size: 14))
+                    }
+                }
+                
+                Spacer()
+                
+                // Edit button
+                Button {
+                    currentEntry = entry
+                    showEditor = true
+                } label: {
+                    Text("View Full Entry")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.purple)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+    
+    private var noEntryView: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            Image(systemName: "doc.text")
+                .font(.system(size: 48))
+                .foregroundColor(.secondary.opacity(0.4))
+            
+            Text("No entry for this day")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.secondary)
+            
+            if Calendar.current.isDate(selectedDate, inSameDayAs: Date()) || selectedDate < Date() {
+                Button {
+                    if let userId = authManager.currentUser?.id {
+                        currentEntry = journalManager.getOrCreateEntryForDate(selectedDate, userId: userId)
+                        showEditor = true
+                    }
+                } label: {
+                    Text("Create Entry")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 10)
+                        .background(Color.purple)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            
+            Spacer()
+        }
+    }
+}
+
+// MARK: - Journal Editor View
+struct JournalEditorView: View {
+    @Binding var entry: JournalEntry
+    @ObservedObject var journalManager: JournalManager
+    @ObservedObject var taskManager: TaskManager
+    @ObservedObject var ruleManager: RuleManager
+    @Environment(\.dismiss) var dismiss
+    
+    @State private var selectedSection = 0
+    
+    let sections = ["Intent", "Daily Facts", "Execution", "Mind", "Learning", "System"]
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            editorHeader
+            
+            // Section tabs
+            sectionTabs
+            
+            // Content
+            ScrollView {
+                VStack(spacing: 24) {
+                    switch selectedSection {
+                    case 0: intentSection
+                    case 1: dailyFactsSection
+                    case 2: executionSection
+                    case 3: mindSection
+                    case 4: learningSection
+                    case 5: systemSection
+                    default: intentSection
+                    }
+                }
+                .padding(24)
+            }
+            
+            // Footer with save
+            editorFooter
+        }
+        .frame(width: 800, height: 700)
+        .background(Color(nsColor: NSColor.windowBackgroundColor))
+    }
+    
+    // MARK: - Header
+    private var editorHeader: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(entry.date.formatted(date: .complete, time: .omitted))
+                    .font(.system(size: 20, weight: .bold))
+                Text("\(Int(entry.completionPercentage))% complete")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            // Progress circle
+            ZStack {
+                Circle()
+                    .stroke(Color.purple.opacity(0.2), lineWidth: 4)
+                    .frame(width: 50, height: 50)
+                Circle()
+                    .trim(from: 0, to: entry.completionPercentage / 100)
+                    .stroke(Color.purple, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .frame(width: 50, height: 50)
+                    .rotationEffect(.degrees(-90))
+            }
+            
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(20)
+        .background(Color(nsColor: NSColor.controlBackgroundColor))
+    }
+    
+    // MARK: - Section Tabs
+    private var sectionTabs: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(0..<sections.count, id: \.self) { index in
+                    Button {
+                        withAnimation { selectedSection = index }
+                    } label: {
+                        Text(sections[index])
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(selectedSection == index ? .white : .secondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(selectedSection == index ? Color.purple : Color(nsColor: NSColor.controlBackgroundColor))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+    }
+    
+    // MARK: - Intent Section
+    private var intentSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            sectionHeader("Intent", icon: "target", color: .purple)
+            
+            // Top 3 outcomes
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Top 3 Outcomes")
+                    .font(.system(size: 14, weight: .semibold))
+                
+                ForEach(0..<3, id: \.self) { index in
+                    HStack(spacing: 12) {
+                        Text("\(index + 1).")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.purple)
+                        TextField("Outcome \(index + 1)", text: Binding(
+                            get: { entry.topOutcomes.indices.contains(index) ? entry.topOutcomes[index] : "" },
+                            set: { newValue in
+                                while entry.topOutcomes.count <= index {
+                                    entry.topOutcomes.append("")
+                                }
+                                entry.topOutcomes[index] = newValue
+                            }
+                        ))
+                        .textFieldStyle(.plain)
+                        .padding(12)
+                        .background(Color(nsColor: NSColor.controlBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
+            
+            // Must not happen
+            fieldRow("Must Not Happen", text: $entry.mustNotHappen, placeholder: "What must you avoid today?")
+            
+            // Energy mode
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Energy Mode")
+                    .font(.system(size: 14, weight: .semibold))
+                
+                HStack(spacing: 12) {
+                    ForEach(EnergyMode.allCases, id: \.self) { mode in
+                        Button {
+                            entry.energyMode = mode
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: mode.icon)
+                                Text(mode.rawValue)
+                            }
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(entry.energyMode == mode ? .white : mode.color)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(entry.energyMode == mode ? mode.color : mode.color.opacity(0.1))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            
+            // Main constraint
+            fieldRow("Main Constraint", text: $entry.mainConstraint, placeholder: "What's your biggest limitation today?")
+            
+            // Today's tasks (auto-linked)
+            todayTasksCard
+        }
+    }
+    
+    private var todayTasksCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Today's Tasks (Auto-linked)")
+                .font(.system(size: 14, weight: .semibold))
+            
+            let todayTasks = taskManager.todayTasks.filter { !$0.isCompleted && $0.type != .meeting }
+            
+            if todayTasks.isEmpty {
+                Text("No tasks scheduled for today")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .padding(12)
+            } else {
+                ForEach(todayTasks.prefix(5)) { task in
+                    HStack(spacing: 8) {
+                        Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(task.isCompleted ? .green : .secondary)
+                        Text(task.title)
+                            .font(.system(size: 13))
+                            .strikethrough(task.isCompleted)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.blue.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+    
+    // MARK: - Daily Facts Section
+    private var dailyFactsSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            sectionHeader("Daily Facts", icon: "chart.bar.fill", color: .blue)
+            
+            // Sleep
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Sleep Hours")
+                        .font(.system(size: 14, weight: .semibold))
+                    HStack {
+                        TextField("Hours", value: $entry.sleepHours, format: .number)
+                            .textFieldStyle(.plain)
+                            .frame(width: 60)
+                            .padding(8)
+                            .background(Color(nsColor: NSColor.controlBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        Text("hours")
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Sleep Quality")
+                        .font(.system(size: 14, weight: .semibold))
+                    HStack(spacing: 8) {
+                        ForEach(1...5, id: \.self) { rating in
+                            Button {
+                                entry.sleepQuality = rating
+                            } label: {
+                                Image(systemName: rating <= (entry.sleepQuality ?? 0) ? "star.fill" : "star")
+                                    .foregroundColor(.yellow)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            
+            fieldRow("Work Blocks", text: $entry.workBlocks, placeholder: "How many deep work blocks?")
+            fieldRow("Key Actions", text: $entry.keyActions, placeholder: "What were your main actions?")
+            fieldRow("Movement", text: $entry.movement, placeholder: "Exercise, steps, activity...")
+            fieldRow("Food Note", text: $entry.foodNote, placeholder: "What did you eat?")
+            fieldRow("Distraction Note", text: $entry.distractionNote, placeholder: "What distracted you?")
+            fieldRow("Money (non-routine)", text: $entry.moneyNote, placeholder: "Any non-routine spending?")
+        }
+    }
+    
+    // MARK: - Execution Section
+    private var executionSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            sectionHeader("Execution Review", icon: "checkmark.seal.fill", color: .green)
+            
+            // Completed tasks card
+            completedTasksCard
+            
+            fieldRow("Planned vs Did", text: $entry.plannedVsDid, placeholder: "Compare what you planned vs what happened...")
+            fieldRow("Biggest Win", text: $entry.biggestWin, placeholder: "What was your biggest achievement today?")
+            fieldRow("Biggest Miss", text: $entry.biggestMiss, placeholder: "What did you miss or fail at?")
+            fieldRow("Root Cause", text: $entry.rootCause, placeholder: "Why did the miss happen?")
+            fieldRow("Fix for Tomorrow", text: $entry.fixForTomorrow, placeholder: "How will you prevent this tomorrow?")
+        }
+    }
+    
+    private var completedTasksCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Completed Today")
+                .font(.system(size: 14, weight: .semibold))
+            
+            let completed = taskManager.todayTasks.filter { $0.isCompleted }
+            let missed = taskManager.todayTasks.filter { !$0.isCompleted && $0.type != .meeting }
+            
+            HStack(spacing: 24) {
+                VStack(alignment: .leading) {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("\(completed.count) Done")
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    ForEach(completed.prefix(3)) { task in
+                        Text("- \(task.title)")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                VStack(alignment: .leading) {
+                    HStack {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.red)
+                        Text("\(missed.count) Missed")
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    ForEach(missed.prefix(3)) { task in
+                        Text("- \(task.title)")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.green.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+    
+    // MARK: - Mind Section
+    private var mindSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            sectionHeader("Mind & Emotion", icon: "brain.head.profile", color: .pink)
+            
+            fieldRow("Dominant Emotion", text: $entry.dominantEmotion, placeholder: "What emotion dominated your day?")
+            fieldRow("Trigger", text: $entry.emotionTrigger, placeholder: "What triggered this emotion?")
+            fieldRow("Automatic Reaction", text: $entry.automaticReaction, placeholder: "How did you react automatically?")
+            fieldRow("Better Response", text: $entry.betterResponse, placeholder: "What would be a better response?")
+        }
+    }
+    
+    // MARK: - Learning Section
+    private var learningSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            sectionHeader("Learning", icon: "lightbulb.fill", color: .yellow)
+            
+            fieldRow("One Thing Learned", text: $entry.oneLearned, placeholder: "What's one thing you learned today?")
+            fieldRow("Source", text: $entry.learningSource, placeholder: "Where did you learn this?")
+            fieldRow("How I'll Apply It", text: $entry.howToApply, placeholder: "How will you use this knowledge?")
+        }
+    }
+    
+    // MARK: - System Section
+    private var systemSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            sectionHeader("System Improvement", icon: "gearshape.2.fill", color: .orange)
+            
+            // Rules status card
+            rulesStatusCard
+            
+            fieldRow("System That Failed", text: $entry.systemFailed, placeholder: "What system or process didn't work?")
+            fieldRow("Why It Failed", text: $entry.whyFailed, placeholder: "Why did the system fail?")
+            fieldRow("System Fix", text: $entry.systemFix, placeholder: "How will you improve the system?")
+        }
+    }
+    
+    private var rulesStatusCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Today's Rules Status")
+                .font(.system(size: 14, weight: .semibold))
+            
+            let completed = ruleManager.dailyRules.filter { $0.isCompletedForPeriod }
+            let missed = ruleManager.dailyRules.filter { !$0.isCompletedForPeriod }
+            
+            HStack(spacing: 24) {
+                VStack(alignment: .leading) {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("\(completed.count) Followed")
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    ForEach(completed.prefix(3)) { rule in
+                        Text("- \(rule.title)")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                VStack(alignment: .leading) {
+                    HStack {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.red)
+                        Text("\(missed.count) Broken")
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    ForEach(missed.prefix(3)) { rule in
+                        Text("- \(rule.title)")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+    
+    // MARK: - Footer
+    private var editorFooter: some View {
+        HStack {
+            Text("Auto-saved")
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+            
+            Spacer()
+            
+            Button {
+                journalManager.updateEntry(entry)
+                dismiss()
+            } label: {
+                Text("Save & Close")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                    .background(Color.purple)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(20)
+        .background(Color(nsColor: NSColor.controlBackgroundColor))
+    }
+    
+    // MARK: - Helpers
+    private func sectionHeader(_ title: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 20))
+                .foregroundColor(color)
+            Text(title)
+                .font(.system(size: 20, weight: .bold))
+        }
+    }
+    
+    private func fieldRow(_ label: String, text: Binding<String>, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.system(size: 14, weight: .semibold))
+            TextField(placeholder, text: text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .padding(12)
+                .background(Color(nsColor: NSColor.controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
 #endif
 
 #Preview {

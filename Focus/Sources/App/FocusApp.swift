@@ -156,6 +156,169 @@ class RuleManager: ObservableObject {
     }
 }
 
+// MARK: - Journal Manager
+@MainActor
+class JournalManager: ObservableObject {
+    static let shared = JournalManager()
+    
+    @Published var entries: [JournalEntry] = []
+    @Published var stats: JournalStats = JournalStats.empty(userId: 0)
+    @Published var isLoading = false
+    @Published var currentEntry: JournalEntry?
+    
+    private let storageKey = "journal_entries"
+    private let statsKey = "journal_stats"
+    
+    init() {
+        loadFromLocalStorage()
+    }
+    
+    // MARK: - Entry Management
+    
+    func getOrCreateEntryForDate(_ date: Date, userId: Int) -> JournalEntry {
+        let calendar = Calendar.current
+        if let existing = entries.first(where: { calendar.isDate($0.date, inSameDayAs: date) }) {
+            return existing
+        }
+        
+        // Create new entry
+        let newEntry = JournalEntry.newEntry(userId: userId, date: date)
+        entries.append(newEntry)
+        saveToLocalStorage()
+        return newEntry
+    }
+    
+    func getTodayEntry(userId: Int) -> JournalEntry {
+        return getOrCreateEntryForDate(Date(), userId: userId)
+    }
+    
+    func updateEntry(_ entry: JournalEntry) {
+        var updatedEntry = entry
+        updatedEntry.updatedAt = Date()
+        
+        if let index = entries.firstIndex(where: { $0.id == entry.id }) {
+            entries[index] = updatedEntry
+        } else {
+            entries.append(updatedEntry)
+        }
+        
+        // Calculate points
+        let completionPoints = Int(entry.completionPercentage / 10)
+        updatedEntry.pointsEarned = completionPoints
+        
+        updateStats()
+        saveToLocalStorage()
+    }
+    
+    func deleteEntry(_ entry: JournalEntry) {
+        entries.removeAll { $0.id == entry.id }
+        updateStats()
+        saveToLocalStorage()
+    }
+    
+    func getEntryForDate(_ date: Date) -> JournalEntry? {
+        let calendar = Calendar.current
+        return entries.first { calendar.isDate($0.date, inSameDayAs: date) }
+    }
+    
+    func getEntriesForMonth(_ date: Date) -> [JournalEntry] {
+        let calendar = Calendar.current
+        let month = calendar.component(.month, from: date)
+        let year = calendar.component(.year, from: date)
+        
+        return entries.filter {
+            calendar.component(.month, from: $0.date) == month &&
+            calendar.component(.year, from: $0.date) == year
+        }.sorted { $0.date > $1.date }
+    }
+    
+    // MARK: - Link with Tasks and Rules
+    
+    func linkCompletedTasks(_ taskIds: [String], to entry: inout JournalEntry) {
+        entry.completedTaskIds = taskIds
+    }
+    
+    func linkMissedTasks(_ taskIds: [String], to entry: inout JournalEntry) {
+        entry.missedTaskIds = taskIds
+    }
+    
+    func linkCompletedRules(_ ruleIds: [String], to entry: inout JournalEntry) {
+        entry.completedRuleIds = ruleIds
+    }
+    
+    func linkMissedRules(_ ruleIds: [String], to entry: inout JournalEntry) {
+        entry.missedRuleIds = ruleIds
+    }
+    
+    // MARK: - Statistics
+    
+    private func updateStats() {
+        let calendar = Calendar.current
+        let sortedEntries = entries.sorted { $0.date > $1.date }
+        
+        // Calculate streak
+        var streak = 0
+        var checkDate = calendar.startOfDay(for: Date())
+        
+        for entry in sortedEntries {
+            let entryDate = calendar.startOfDay(for: entry.date)
+            if entryDate == checkDate && entry.isComplete {
+                streak += 1
+                checkDate = calendar.date(byAdding: .day, value: -1, to: checkDate) ?? checkDate
+            } else if entryDate < checkDate {
+                break
+            }
+        }
+        
+        stats.currentStreak = streak
+        stats.longestStreak = max(stats.longestStreak, streak)
+        stats.totalEntries = entries.count
+        
+        // Calculate average completion
+        if !entries.isEmpty {
+            let totalCompletion = entries.reduce(0.0) { $0 + $1.completionPercentage }
+            stats.averageCompletion = totalCompletion / Double(entries.count)
+        }
+        
+        // Total points
+        stats.totalPoints = entries.reduce(0) { $0 + $1.pointsEarned }
+        stats.lastEntryDate = sortedEntries.first?.date
+    }
+    
+    // MARK: - Persistence
+    
+    private func saveToLocalStorage() {
+        if let encoded = try? JSONEncoder().encode(entries) {
+            UserDefaults.standard.set(encoded, forKey: storageKey)
+        }
+        if let encoded = try? JSONEncoder().encode(stats) {
+            UserDefaults.standard.set(encoded, forKey: statsKey)
+        }
+    }
+    
+    private func loadFromLocalStorage() {
+        if let data = UserDefaults.standard.data(forKey: storageKey),
+           let decoded = try? JSONDecoder().decode([JournalEntry].self, from: data) {
+            entries = decoded
+        }
+        if let data = UserDefaults.standard.data(forKey: statsKey),
+           let decoded = try? JSONDecoder().decode(JournalStats.self, from: data) {
+            stats = decoded
+        }
+    }
+    
+    // MARK: - Date helpers
+    
+    func hasEntryForDate(_ date: Date) -> Bool {
+        let calendar = Calendar.current
+        return entries.contains { calendar.isDate($0.date, inSameDayAs: date) }
+    }
+    
+    func completionForDate(_ date: Date) -> Double {
+        getEntryForDate(date)?.completionPercentage ?? 0
+    }
+}
+
 @main
 struct FocusApp: App {
     @StateObject private var authManager = AuthManager.shared
@@ -4067,6 +4230,10 @@ struct FullAppWindowView: View {
                     FullRuleBookView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
+                case 3:
+                    FullJournalView()
+                        .environmentObject(taskManager)
+                        .environmentObject(authManager)
                 default:
                     FullCalendarView()
                         .environmentObject(taskManager)
@@ -4134,6 +4301,7 @@ struct FullAppWindowView: View {
                 tabButton("Personal", icon: "calendar", index: 0)
                 tabButton("Meetings", icon: "video", index: 1)
                 tabButton("Rule Book", icon: "book.closed", index: 2)
+                tabButton("Journal", icon: "book.pages", index: 3)
             }
             .padding(4)
             .background(
@@ -4150,22 +4318,23 @@ struct FullAppWindowView: View {
             
             // Right section - Actions
             HStack(spacing: 12) {
-                    Button {
-                    // Add Todo
-                    } label: {
+                Button {
+                    // Open Journaling
+                    withAnimation { selectedTab = 3 }
+                } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "checklist")
+                        Image(systemName: "book.pages.fill")
                             .font(.system(size: 11))
-                        Text("Add Todo")
+                        Text("Journal")
                             .font(.system(size: 12, weight: .medium))
                     }
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.purple)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color(nsColor: NSColor.controlBackgroundColor))
+                    .background(Color.purple.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
-                    }
-                    .buttonStyle(.plain)
+                }
+                .buttonStyle(.plain)
                 
                 Button {
                     // Add Task

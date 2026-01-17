@@ -613,6 +613,267 @@ struct Badge: Identifiable {
     ]
 }
 
+// MARK: - Journal Models
+
+/// Energy mode for the day
+enum EnergyMode: String, Codable, CaseIterable {
+    case push = "Push"
+    case maintain = "Maintain"
+    case recover = "Recover"
+    
+    var icon: String {
+        switch self {
+        case .push: return "flame.fill"
+        case .maintain: return "equal.circle.fill"
+        case .recover: return "leaf.fill"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .push: return .orange
+        case .maintain: return .blue
+        case .recover: return .green
+        }
+    }
+}
+
+/// Journal entry for daily reflection
+struct JournalEntry: Codable, Identifiable {
+    var id: String
+    var userId: Int
+    var date: Date
+    var createdAt: Date
+    var updatedAt: Date
+    
+    // 1. Intent Section
+    var topOutcomes: [String]  // Top 3 outcomes
+    var mustNotHappen: String
+    var energyMode: EnergyMode
+    var mainConstraint: String
+    
+    // 2. Daily Facts Section
+    var sleepHours: Double?
+    var sleepQuality: Int?  // 1-5
+    var workBlocks: String
+    var keyActions: String
+    var movement: String
+    var foodNote: String
+    var distractionNote: String
+    var moneyNote: String
+    
+    // 3. Execution Review Section
+    var plannedVsDid: String
+    var biggestWin: String
+    var biggestMiss: String
+    var rootCause: String
+    var fixForTomorrow: String
+    
+    // 4. Mind & Emotion Section
+    var dominantEmotion: String
+    var emotionTrigger: String
+    var automaticReaction: String
+    var betterResponse: String
+    
+    // 5. Learning Section
+    var oneLearned: String
+    var learningSource: String
+    var howToApply: String
+    
+    // 6. System Improvement Section
+    var systemFailed: String
+    var whyFailed: String
+    var systemFix: String
+    
+    // Linked data (auto-populated)
+    var completedTaskIds: [String]
+    var missedTaskIds: [String]
+    var completedRuleIds: [String]
+    var missedRuleIds: [String]
+    
+    // Rich content
+    var freeformNotes: String  // Rich text / markdown
+    var imageUrls: [String]
+    var tags: [String]
+    
+    // Gamification
+    var pointsEarned: Int
+    var streak: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case date
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case topOutcomes = "top_outcomes"
+        case mustNotHappen = "must_not_happen"
+        case energyMode = "energy_mode"
+        case mainConstraint = "main_constraint"
+        case sleepHours = "sleep_hours"
+        case sleepQuality = "sleep_quality"
+        case workBlocks = "work_blocks"
+        case keyActions = "key_actions"
+        case movement
+        case foodNote = "food_note"
+        case distractionNote = "distraction_note"
+        case moneyNote = "money_note"
+        case plannedVsDid = "planned_vs_did"
+        case biggestWin = "biggest_win"
+        case biggestMiss = "biggest_miss"
+        case rootCause = "root_cause"
+        case fixForTomorrow = "fix_for_tomorrow"
+        case dominantEmotion = "dominant_emotion"
+        case emotionTrigger = "emotion_trigger"
+        case automaticReaction = "automatic_reaction"
+        case betterResponse = "better_response"
+        case oneLearned = "one_learned"
+        case learningSource = "learning_source"
+        case howToApply = "how_to_apply"
+        case systemFailed = "system_failed"
+        case whyFailed = "why_failed"
+        case systemFix = "system_fix"
+        case completedTaskIds = "completed_task_ids"
+        case missedTaskIds = "missed_task_ids"
+        case completedRuleIds = "completed_rule_ids"
+        case missedRuleIds = "missed_rule_ids"
+        case freeformNotes = "freeform_notes"
+        case imageUrls = "image_urls"
+        case tags
+        case pointsEarned = "points_earned"
+        case streak
+    }
+    
+    // Empty entry for today
+    static func newEntry(userId: Int, date: Date = Date()) -> JournalEntry {
+        JournalEntry(
+            id: UUID().uuidString,
+            userId: userId,
+            date: date,
+            createdAt: Date(),
+            updatedAt: Date(),
+            topOutcomes: ["", "", ""],
+            mustNotHappen: "",
+            energyMode: .maintain,
+            mainConstraint: "",
+            sleepHours: nil,
+            sleepQuality: nil,
+            workBlocks: "",
+            keyActions: "",
+            movement: "",
+            foodNote: "",
+            distractionNote: "",
+            moneyNote: "",
+            plannedVsDid: "",
+            biggestWin: "",
+            biggestMiss: "",
+            rootCause: "",
+            fixForTomorrow: "",
+            dominantEmotion: "",
+            emotionTrigger: "",
+            automaticReaction: "",
+            betterResponse: "",
+            oneLearned: "",
+            learningSource: "",
+            howToApply: "",
+            systemFailed: "",
+            whyFailed: "",
+            systemFix: "",
+            completedTaskIds: [],
+            missedTaskIds: [],
+            completedRuleIds: [],
+            missedRuleIds: [],
+            freeformNotes: "",
+            imageUrls: [],
+            tags: [],
+            pointsEarned: 0,
+            streak: 0
+        )
+    }
+    
+    var isComplete: Bool {
+        // Entry is complete if at least the intent section and one other is filled
+        let hasIntent = !topOutcomes.filter { !$0.isEmpty }.isEmpty || !mustNotHappen.isEmpty
+        let hasFacts = sleepHours != nil || !workBlocks.isEmpty || !keyActions.isEmpty
+        let hasReview = !biggestWin.isEmpty || !biggestMiss.isEmpty
+        let hasEmotion = !dominantEmotion.isEmpty
+        let hasLearning = !oneLearned.isEmpty
+        
+        return hasIntent && (hasFacts || hasReview || hasEmotion || hasLearning)
+    }
+    
+    var completionPercentage: Double {
+        var filled = 0
+        var total = 20
+        
+        // Intent (4 fields)
+        if !topOutcomes.filter({ !$0.isEmpty }).isEmpty { filled += 1 }
+        if !mustNotHappen.isEmpty { filled += 1 }
+        if !mainConstraint.isEmpty { filled += 1 }
+        filled += 1  // energyMode always has value
+        
+        // Facts (7 fields)
+        if sleepHours != nil { filled += 1 }
+        if !workBlocks.isEmpty { filled += 1 }
+        if !keyActions.isEmpty { filled += 1 }
+        if !movement.isEmpty { filled += 1 }
+        if !foodNote.isEmpty { filled += 1 }
+        if !distractionNote.isEmpty { filled += 1 }
+        if !moneyNote.isEmpty { filled += 1 }
+        
+        // Review (5 fields)
+        if !plannedVsDid.isEmpty { filled += 1 }
+        if !biggestWin.isEmpty { filled += 1 }
+        if !biggestMiss.isEmpty { filled += 1 }
+        if !rootCause.isEmpty { filled += 1 }
+        if !fixForTomorrow.isEmpty { filled += 1 }
+        
+        // Emotion (4 fields)
+        total += 4
+        if !dominantEmotion.isEmpty { filled += 1 }
+        if !emotionTrigger.isEmpty { filled += 1 }
+        if !automaticReaction.isEmpty { filled += 1 }
+        if !betterResponse.isEmpty { filled += 1 }
+        
+        // Learning (3 fields)
+        total += 3
+        if !oneLearned.isEmpty { filled += 1 }
+        if !learningSource.isEmpty { filled += 1 }
+        if !howToApply.isEmpty { filled += 1 }
+        
+        // System (3 fields)
+        total += 3
+        if !systemFailed.isEmpty { filled += 1 }
+        if !whyFailed.isEmpty { filled += 1 }
+        if !systemFix.isEmpty { filled += 1 }
+        
+        return Double(filled) / Double(total) * 100
+    }
+}
+
+/// Journal statistics
+struct JournalStats: Codable {
+    var userId: Int
+    var totalEntries: Int
+    var currentStreak: Int
+    var longestStreak: Int
+    var totalPoints: Int
+    var averageCompletion: Double
+    var lastEntryDate: Date?
+    
+    static func empty(userId: Int) -> JournalStats {
+        JournalStats(
+            userId: userId,
+            totalEntries: 0,
+            currentStreak: 0,
+            longestStreak: 0,
+            totalPoints: 0,
+            averageCompletion: 0,
+            lastEntryDate: nil
+        )
+    }
+}
+
 // MARK: - Extensions
 extension DateFormatter {
     static let timeFormatter: DateFormatter = {
