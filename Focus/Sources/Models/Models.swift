@@ -554,27 +554,61 @@ struct UserRuleStats: Codable {
     
     var levelName: String {
         switch currentLevel {
-        case 0...4: return "Beginner"
-        case 5...9: return "Apprentice"
-        case 10...19: return "Achiever"
-        case 20...29: return "Master"
-        case 30...49: return "Expert"
-        case 50...74: return "Champion"
-        case 75...99: return "Legend"
-        default: return "Mythic"
+        case 0...2: return "Rookie"
+        case 3...5: return "Beginner"
+        case 6...9: return "Apprentice"
+        case 10...14: return "Rising Star"
+        case 15...19: return "Achiever"
+        case 20...29: return "Pro"
+        case 30...39: return "Expert"
+        case 40...49: return "Master"
+        case 50...59: return "Grandmaster"
+        case 60...74: return "Champion"
+        case 75...89: return "Legend"
+        case 90...99: return "Mythic"
+        case 100...149: return "Immortal"
+        case 150...199: return "Titan"
+        default: return "God Tier"
         }
     }
     
     var levelColor: Color {
         switch currentLevel {
-        case 0...4: return .gray
-        case 5...9: return .green
-        case 10...19: return .blue
-        case 20...29: return .purple
-        case 30...49: return .orange
-        case 50...74: return .red
-        case 75...99: return .yellow
-        default: return .pink
+        case 0...2: return .gray
+        case 3...5: return .mint
+        case 6...9: return .green
+        case 10...14: return .teal
+        case 15...19: return .cyan
+        case 20...29: return .blue
+        case 30...39: return .indigo
+        case 40...49: return .purple
+        case 50...59: return .pink
+        case 60...74: return .orange
+        case 75...89: return .red
+        case 90...99: return .yellow
+        case 100...149: return Color(red: 1, green: 0.84, blue: 0) // Gold
+        case 150...199: return Color(red: 0.9, green: 0.9, blue: 1) // Platinum
+        default: return Color(red: 1, green: 0.5, blue: 0.8) // God Tier Pink/Gold
+        }
+    }
+    
+    var levelIcon: String {
+        switch currentLevel {
+        case 0...2: return "person.fill"
+        case 3...5: return "star"
+        case 6...9: return "star.fill"
+        case 10...14: return "sparkle"
+        case 15...19: return "bolt.fill"
+        case 20...29: return "flame"
+        case 30...39: return "flame.fill"
+        case 40...49: return "crown"
+        case 50...59: return "crown.fill"
+        case 60...74: return "trophy"
+        case 75...89: return "trophy.fill"
+        case 90...99: return "sparkles"
+        case 100...149: return "seal.fill"
+        case 150...199: return "diamond.fill"
+        default: return "wand.and.stars"
         }
     }
     

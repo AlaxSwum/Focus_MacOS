@@ -5386,31 +5386,107 @@ struct FullRuleBookView: View {
     }
     
     private var statsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-            statCard("Points", value: "\(ruleManager.userStats.totalPoints)", icon: "star.fill", color: .yellow)
-            statCard("Level", value: "Lv.\(ruleManager.userStats.currentLevel)", icon: "trophy.fill", color: ruleManager.userStats.levelColor)
-            statCard("Badges", value: "\(ruleManager.userStats.badges.count)", icon: "medal.fill", color: .purple)
-            statCard("Check-ins", value: "\(ruleManager.userStats.totalRulesCompleted)", icon: "checkmark.circle.fill", color: .green)
+        VStack(spacing: 16) {
+            // Level Card - Prominent
+            levelCard
+            
+            // Stats Row
+            HStack(spacing: 16) {
+                miniStatCard("Points", value: "\(ruleManager.userStats.totalPoints)", icon: "star.fill", color: .yellow)
+                miniStatCard("Badges", value: "\(ruleManager.userStats.badges.count)", icon: "medal.fill", color: .purple)
+                miniStatCard("Check-ins", value: "\(ruleManager.userStats.totalRulesCompleted)", icon: "checkmark.circle.fill", color: .green)
+            }
         }
     }
     
-    private func statCard(_ title: String, value: String, icon: String, color: Color) -> some View {
-        VStack(spacing: 12) {
+    private var levelCard: some View {
+        VStack(spacing: 16) {
+            // Level Icon and Name
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(colors: [ruleManager.userStats.levelColor, ruleManager.userStats.levelColor.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                        .frame(width: 64, height: 64)
+                    
+                    Image(systemName: ruleManager.userStats.levelIcon)
+                        .font(.system(size: 28))
+                        .foregroundColor(.white)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Level \(ruleManager.userStats.currentLevel)")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                    Text(ruleManager.userStats.levelName)
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(ruleManager.userStats.levelColor)
+                }
+                
+                Spacer()
+            }
+            
+            // Progress to next level
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Progress to next level")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(Int(ruleManager.userStats.levelProgress))%")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(ruleManager.userStats.levelColor)
+                }
+                
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(ruleManager.userStats.levelColor.opacity(0.15))
+                            .frame(height: 8)
+                        
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(
+                                LinearGradient(colors: [ruleManager.userStats.levelColor, ruleManager.userStats.levelColor.opacity(0.7)], startPoint: .leading, endPoint: .trailing)
+                            )
+                            .frame(width: geo.size.width * CGFloat(ruleManager.userStats.levelProgress) / 100, height: 8)
+                    }
+                }
+                .frame(height: 8)
+                
+                Text("\(ruleManager.userStats.pointsToNextLevel) pts to next level")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(nsColor: NSColor.windowBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .strokeBorder(ruleManager.userStats.levelColor.opacity(0.2), lineWidth: 2)
+                )
+        )
+    }
+    
+    private func miniStatCard(_ title: String, value: String, icon: String, color: Color) -> some View {
+        VStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 28))
+                .font(.system(size: 22))
                 .foregroundColor(color)
             
             Text(value)
-                .font(.system(size: 24, weight: .bold))
+                .font(.system(size: 20, weight: .bold))
             
             Text(title)
-                .font(.system(size: 13))
+                .font(.system(size: 11))
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .padding(.vertical, 20)
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 14)
                 .fill(Color(nsColor: NSColor.windowBackgroundColor))
         )
     }
@@ -6636,14 +6712,14 @@ struct JournalEditorView: View {
             HStack(spacing: 0) {
                 // Left Sidebar - Section Navigation
                 sidebarNavigation
-                    .frame(width: 240)
+                    .frame(width: 280)
                 
                 // Main Content Area
                 mainContentArea
                     .frame(maxWidth: .infinity)
             }
         }
-        .frame(minWidth: 1000, minHeight: 700)
+        .frame(minWidth: 1200, idealWidth: 1400, minHeight: 800, idealHeight: 900)
         .background(Color(nsColor: NSColor.textBackgroundColor))
     }
     
@@ -6651,51 +6727,52 @@ struct JournalEditorView: View {
     private var sidebarNavigation: some View {
         VStack(spacing: 0) {
             // Date Header
-            VStack(spacing: 8) {
+            VStack(spacing: 12) {
                 Text(entry.date.formatted(.dateTime.weekday(.wide)))
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.secondary)
                 Text(entry.date.formatted(.dateTime.day().month(.abbreviated)))
-                    .font(.system(size: 32, weight: .bold))
+                    .font(.system(size: 42, weight: .bold))
             }
-            .padding(.vertical, 32)
+            .padding(.vertical, 40)
             
             // Progress Ring
             ZStack {
                 Circle()
-                    .stroke(Color.purple.opacity(0.15), lineWidth: 8)
-                    .frame(width: 100, height: 100)
+                    .stroke(Color.purple.opacity(0.12), lineWidth: 10)
+                    .frame(width: 130, height: 130)
                 
                 Circle()
                     .trim(from: 0, to: entry.completionPercentage / 100)
                     .stroke(
                         LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                        style: StrokeStyle(lineWidth: 10, lineCap: .round)
                     )
-                    .frame(width: 100, height: 100)
+                    .frame(width: 130, height: 130)
                     .rotationEffect(.degrees(-90))
+                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: entry.completionPercentage)
                 
-                VStack(spacing: 2) {
+                VStack(spacing: 4) {
                     Text("\(Int(entry.completionPercentage))%")
-                        .font(.system(size: 24, weight: .bold))
-                    Text("done")
-                        .font(.system(size: 12))
+                        .font(.system(size: 32, weight: .bold))
+                    Text("complete")
+                        .font(.system(size: 13))
                         .foregroundColor(.secondary)
                 }
             }
-            .padding(.bottom, 32)
+            .padding(.bottom, 40)
             
             Divider()
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 28)
             
             // Section List
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 ForEach(0..<sectionData.count, id: \.self) { index in
                     sectionButton(index)
                 }
             }
-            .padding(.vertical, 20)
-            .padding(.horizontal, 16)
+            .padding(.vertical, 24)
+            .padding(.horizontal, 20)
             
             Spacer()
             
@@ -6704,24 +6781,25 @@ struct JournalEditorView: View {
                 journalManager.updateEntry(entry)
                 dismiss()
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .semibold))
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18))
                     Text("Save & Close")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
+                .padding(.vertical, 16)
                 .background(
                     LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .shadow(color: .purple.opacity(0.3), radius: 8, y: 4)
             }
             .buttonStyle(.plain)
-            .padding(20)
+            .padding(24)
         }
-        .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.5))
+        .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.3))
     }
     
     private func sectionButton(_ index: Int) -> some View {
@@ -6734,34 +6812,34 @@ struct JournalEditorView: View {
                 selectedSection = index
             }
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
                 ZStack {
                     Circle()
-                        .fill(isSelected ? data.color : data.color.opacity(0.15))
-                        .frame(width: 36, height: 36)
+                        .fill(isSelected ? data.color : data.color.opacity(0.12))
+                        .frame(width: 42, height: 42)
                     
                     Image(systemName: data.icon)
-                        .font(.system(size: 14))
+                        .font(.system(size: 16))
                         .foregroundColor(isSelected ? .white : data.color)
                 }
                 
                 Text(data.title)
-                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
                     .foregroundColor(isSelected ? .primary : .secondary)
                 
                 Spacer()
                 
                 if isSelected {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(data.color)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isSelected ? data.color.opacity(0.1) : (isHovered ? Color.secondary.opacity(0.08) : Color.clear))
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? data.color.opacity(0.12) : (isHovered ? Color.secondary.opacity(0.06) : Color.clear))
             )
         }
         .buttonStyle(.plain)
@@ -6780,38 +6858,38 @@ struct JournalEditorView: View {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.secondary)
-                        .padding(10)
-                        .background(Circle().fill(Color.secondary.opacity(0.1)))
+                        .padding(12)
+                        .background(Circle().fill(Color.secondary.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
             }
-            .padding(24)
+            .padding(32)
             
             // Section Content
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     // Section Title
-                    HStack(spacing: 16) {
+                    HStack(spacing: 20) {
                         ZStack {
                             Circle()
-                                .fill(sectionData[selectedSection].color.opacity(0.15))
-                                .frame(width: 56, height: 56)
+                                .fill(sectionData[selectedSection].color.opacity(0.12))
+                                .frame(width: 72, height: 72)
                             Image(systemName: sectionData[selectedSection].icon)
-                                .font(.system(size: 24))
+                                .font(.system(size: 30))
                                 .foregroundColor(sectionData[selectedSection].color)
                         }
                         
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text(sectionData[selectedSection].title)
-                                .font(.system(size: 28, weight: .bold))
+                                .font(.system(size: 36, weight: .bold))
                             Text(sectionSubtitle)
-                                .font(.system(size: 14))
+                                .font(.system(size: 16))
                                 .foregroundColor(.secondary)
                         }
                     }
-                    .padding(.bottom, 40)
+                    .padding(.bottom, 48)
                     
                     // Content
                     Group {
@@ -6828,10 +6906,10 @@ struct JournalEditorView: View {
                     
                     // Navigation Buttons
                     navigationButtons
-                        .padding(.top, 48)
+                        .padding(.top, 56)
                 }
-                .padding(48)
-                .frame(maxWidth: 700, alignment: .leading)
+                .padding(56)
+                .frame(maxWidth: 800, alignment: .leading)
             }
         }
     }
