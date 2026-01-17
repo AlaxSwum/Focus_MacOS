@@ -5061,7 +5061,7 @@ struct FullRuleBookView: View {
     @EnvironmentObject var taskManager: TaskManager
     @EnvironmentObject var authManager: AuthManager
     @StateObject private var ruleManager = RuleManager.shared
-    @State private var selectedPeriod: Int? = nil  // nil = show boxes, 1-4 = show rules
+    @State private var selectedPeriod: Int = 1  // 1 = Daily (default), 2 = Weekly, 3 = Monthly, 4 = Yearly
     
     private var filteredRules: [Rule] {
         switch selectedPeriod {
@@ -5079,13 +5079,8 @@ struct FullRuleBookView: View {
             headerSection
             
             // Main content
-            if selectedPeriod == nil {
-                // Show 4 period boxes
-                periodBoxesView
-            } else {
-                // Show rules for selected period
-                rulesListView
-            }
+            // Always show rules list with period tabs
+            rulesListView
         }
         .background(Color(nsColor: NSColor.windowBackgroundColor))
     }
@@ -5093,36 +5088,25 @@ struct FullRuleBookView: View {
     // MARK: - Header
     private var headerSection: some View {
         HStack(spacing: 16) {
-            // Back button (when viewing rules)
-            if selectedPeriod != nil {
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        selectedPeriod = nil
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("Back")
-                            .font(.system(size: 14, weight: .medium))
-                    }
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color(nsColor: NSColor.controlBackgroundColor))
-                    .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-            }
-            
             // Title
             HStack(spacing: 12) {
                 Image(systemName: "book.closed.fill")
                     .font(.system(size: 24))
                     .foregroundColor(.green)
-                Text(selectedPeriod == nil ? "Rule Book" : periodTitle)
+                Text("Rule Book")
                     .font(.system(size: 24, weight: .bold))
             }
+            
+            // Period tabs
+            HStack(spacing: 4) {
+                periodTabButton("Daily", icon: "sun.max.fill", color: .orange, period: 1)
+                periodTabButton("Weekly", icon: "calendar.badge.clock", color: .blue, period: 2)
+                periodTabButton("Monthly", icon: "calendar", color: .purple, period: 3)
+                periodTabButton("Yearly", icon: "sparkles", color: .pink, period: 4)
+            }
+            .padding(4)
+            .background(Color(nsColor: NSColor.controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
             
             Spacer()
             
@@ -5197,7 +5181,50 @@ struct FullRuleBookView: View {
         }
     }
     
-    // MARK: - Period Boxes View
+    private func periodTabButton(_ title: String, icon: String, color: Color, period: Int) -> some View {
+        let isSelected = selectedPeriod == period
+        let rules = rulesForPeriod(period)
+        let completed = rules.filter { $0.isCompletedForPeriod }.count
+        
+        return Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                selectedPeriod = period
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                if rules.count > 0 {
+                    Text("\(completed)/\(rules.count)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(isSelected ? Color.white.opacity(0.3) : color.opacity(0.2))
+                        .clipShape(Capsule())
+                }
+            }
+            .foregroundColor(isSelected ? .white : color)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(isSelected ? color : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private func rulesForPeriod(_ period: Int) -> [Rule] {
+        switch period {
+        case 1: return ruleManager.dailyRules
+        case 2: return ruleManager.weeklyRules
+        case 3: return ruleManager.monthlyRules
+        case 4: return ruleManager.yearlyRules
+        default: return ruleManager.rules
+        }
+    }
+    
+    // MARK: - Period Boxes View (kept for reference but not used)
     private var periodBoxesView: some View {
         ScrollView {
             VStack(spacing: 32) {
@@ -5473,54 +5500,59 @@ struct RuleCheckRow: View {
     @State private var showCheckAnimation = false
     
     var body: some View {
-        HStack(spacing: 20) {
-            // Large checkbox
-            checkboxButton
-            
-            // Rule info
-            ruleInfoSection
-            
-            Spacer()
-            
-            // Progress and streak
-            progressSection
+        Button {
+            handleCheck()
+        } label: {
+            HStack(spacing: 20) {
+                // Large checkbox
+                checkboxView
+                
+                // Rule info
+                ruleInfoSection
+                
+                Spacer()
+                
+                // Progress and streak
+                progressSection
+            }
+            .padding(20)
+            .background(rowBackground)
         }
-        .padding(20)
-        .background(rowBackground)
+        .buttonStyle(.plain)
         .scaleEffect(isHovered ? 1.01 : 1.0)
         .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isHovered)
         .onHover { isHovered = $0 }
     }
     
-    private var checkboxButton: some View {
-        Button {
-            handleCheck()
-        } label: {
-            ZStack {
-                // Background
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(rule.isCompletedForPeriod ? rule.color : Color(nsColor: NSColor.controlBackgroundColor))
-                    .frame(width: 56, height: 56)
-                
-                // Border
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(rule.color, lineWidth: 3)
-                    .frame(width: 56, height: 56)
-                
-                // Checkmark or count
-                if rule.isCompletedForPeriod {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(.white)
-                        .scaleEffect(showCheckAnimation ? 1.2 : 1.0)
-                } else if rule.targetCount > 1 {
-                    Text("\(rule.currentCount)/\(rule.targetCount)")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(rule.color)
-                }
+    private var checkboxView: some View {
+        ZStack {
+            // Background
+            RoundedRectangle(cornerRadius: 12)
+                .fill(rule.isCompletedForPeriod ? rule.color : Color(nsColor: NSColor.controlBackgroundColor))
+                .frame(width: 56, height: 56)
+            
+            // Border
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(rule.color, lineWidth: 3)
+                .frame(width: 56, height: 56)
+            
+            // Checkmark or count
+            if rule.isCompletedForPeriod {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.white)
+                    .scaleEffect(showCheckAnimation ? 1.2 : 1.0)
+            } else if rule.targetCount > 1 {
+                Text("\(rule.currentCount)/\(rule.targetCount)")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(rule.color)
+            } else {
+                // Empty checkbox indicator
+                Circle()
+                    .stroke(rule.color.opacity(0.5), lineWidth: 2)
+                    .frame(width: 20, height: 20)
             }
         }
-        .buttonStyle(.plain)
     }
     
     private var ruleInfoSection: some View {
@@ -5539,24 +5571,14 @@ struct RuleCheckRow: View {
                     .strikethrough(rule.isCompletedForPeriod)
             }
             
-            // Period and target info
+            // Target info
             HStack(spacing: 12) {
-                // Period badge
-                HStack(spacing: 4) {
-                    Image(systemName: rule.period.icon)
-                        .font(.system(size: 12))
-                    Text(rule.period.displayName)
-                        .font(.system(size: 13, weight: .medium))
-                }
-                .foregroundColor(rule.period.color)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(rule.period.color.opacity(0.15))
-                .clipShape(Capsule())
-                
-                // Target
                 if rule.targetCount > 1 {
-                    Text("Target: \(rule.targetCount)x")
+                    Text("Target: \(rule.targetCount)x per \(rule.period.displayName.lowercased())")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Once per \(rule.period.displayName.lowercased())")
                         .font(.system(size: 13))
                         .foregroundColor(.secondary)
                 }
@@ -5591,22 +5613,29 @@ struct RuleCheckRow: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.green)
                 }
+            } else {
+                // Click hint
+                Text("Click to complete")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
             }
         }
     }
     
     private var rowBackground: some View {
         RoundedRectangle(cornerRadius: 16)
-            .fill(Color(nsColor: NSColor.controlBackgroundColor))
-            .shadow(color: isHovered ? .black.opacity(0.1) : .black.opacity(0.05), radius: isHovered ? 12 : 6, y: isHovered ? 6 : 3)
+            .fill(rule.isCompletedForPeriod ? rule.color.opacity(0.1) : Color(nsColor: NSColor.controlBackgroundColor))
+            .shadow(color: isHovered ? .black.opacity(0.12) : .black.opacity(0.05), radius: isHovered ? 12 : 6, y: isHovered ? 6 : 3)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(rule.isCompletedForPeriod ? Color.green.opacity(0.4) : Color.clear, lineWidth: 2)
+                    .strokeBorder(rule.isCompletedForPeriod ? Color.green.opacity(0.4) : (isHovered ? rule.color.opacity(0.3) : Color.clear), lineWidth: 2)
             )
     }
     
     private func handleCheck() {
-        guard rule.currentCount < rule.targetCount else { return }
+        // Allow clicking if not yet completed
+        guard !rule.isCompletedForPeriod else { return }
+        
         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
             showCheckAnimation = true
             ruleManager.incrementRule(rule)
