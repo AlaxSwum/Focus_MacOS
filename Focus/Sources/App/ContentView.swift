@@ -6620,157 +6620,355 @@ struct JournalEditorView: View {
     @Environment(\.dismiss) var dismiss
     
     @State private var selectedSection = 0
+    @State private var isHoveredSection: Int? = nil
     
-    let sections = ["Intent", "Daily Facts", "Execution", "Mind", "Learning", "System"]
+    let sectionData: [(title: String, icon: String, color: Color)] = [
+        ("Intent", "target", .purple),
+        ("Daily Facts", "chart.bar.fill", .blue),
+        ("Execution", "checkmark.seal.fill", .green),
+        ("Mind", "brain.head.profile", .pink),
+        ("Learning", "lightbulb.fill", .yellow),
+        ("System", "gearshape.2.fill", .orange)
+    ]
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            editorHeader
-            
-            // Section tabs
-            sectionTabs
-            
-            // Content
-            ScrollView {
-                VStack(spacing: 24) {
-                    switch selectedSection {
-                    case 0: intentSection
-                    case 1: dailyFactsSection
-                    case 2: executionSection
-                    case 3: mindSection
-                    case 4: learningSection
-                    case 5: systemSection
-                    default: intentSection
-                    }
-                }
-                .padding(24)
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                // Left Sidebar - Section Navigation
+                sidebarNavigation
+                    .frame(width: 240)
+                
+                // Main Content Area
+                mainContentArea
+                    .frame(maxWidth: .infinity)
             }
-            
-            // Footer with save
-            editorFooter
         }
-        .frame(width: 800, height: 700)
-        .background(Color(nsColor: NSColor.windowBackgroundColor))
+        .frame(minWidth: 1000, minHeight: 700)
+        .background(Color(nsColor: NSColor.textBackgroundColor))
     }
     
-    // MARK: - Header
-    private var editorHeader: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(entry.date.formatted(date: .complete, time: .omitted))
-                    .font(.system(size: 20, weight: .bold))
-                Text("\(Int(entry.completionPercentage))% complete")
-                    .font(.system(size: 13))
+    // MARK: - Sidebar Navigation
+    private var sidebarNavigation: some View {
+        VStack(spacing: 0) {
+            // Date Header
+            VStack(spacing: 8) {
+                Text(entry.date.formatted(.dateTime.weekday(.wide)))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.secondary)
+                Text(entry.date.formatted(.dateTime.day().month(.abbreviated)))
+                    .font(.system(size: 32, weight: .bold))
+            }
+            .padding(.vertical, 32)
+            
+            // Progress Ring
+            ZStack {
+                Circle()
+                    .stroke(Color.purple.opacity(0.15), lineWidth: 8)
+                    .frame(width: 100, height: 100)
+                
+                Circle()
+                    .trim(from: 0, to: entry.completionPercentage / 100)
+                    .stroke(
+                        LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                    )
+                    .frame(width: 100, height: 100)
+                    .rotationEffect(.degrees(-90))
+                
+                VStack(spacing: 2) {
+                    Text("\(Int(entry.completionPercentage))%")
+                        .font(.system(size: 24, weight: .bold))
+                    Text("done")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.bottom, 32)
+            
+            Divider()
+                .padding(.horizontal, 24)
+            
+            // Section List
+            VStack(spacing: 4) {
+                ForEach(0..<sectionData.count, id: \.self) { index in
+                    sectionButton(index)
+                }
+            }
+            .padding(.vertical, 20)
+            .padding(.horizontal, 16)
+            
+            Spacer()
+            
+            // Save Button
+            Button {
+                journalManager.updateEntry(entry)
+                dismiss()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("Save & Close")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            .padding(20)
+        }
+        .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.5))
+    }
+    
+    private func sectionButton(_ index: Int) -> some View {
+        let data = sectionData[index]
+        let isSelected = selectedSection == index
+        let isHovered = isHoveredSection == index
+        
+        return Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                selectedSection = index
+            }
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? data.color : data.color.opacity(0.15))
+                        .frame(width: 36, height: 36)
+                    
+                    Image(systemName: data.icon)
+                        .font(.system(size: 14))
+                        .foregroundColor(isSelected ? .white : data.color)
+                }
+                
+                Text(data.title)
+                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? .primary : .secondary)
+                
+                Spacer()
+                
+                if isSelected {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(data.color)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? data.color.opacity(0.1) : (isHovered ? Color.secondary.opacity(0.08) : Color.clear))
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHoveredSection = hovering ? index : nil
+        }
+    }
+    
+    // MARK: - Main Content Area
+    private var mainContentArea: some View {
+        VStack(spacing: 0) {
+            // Top Bar with close button
+            HStack {
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .padding(10)
+                        .background(Circle().fill(Color.secondary.opacity(0.1)))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(24)
+            
+            // Section Content
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Section Title
+                    HStack(spacing: 16) {
+                        ZStack {
+                            Circle()
+                                .fill(sectionData[selectedSection].color.opacity(0.15))
+                                .frame(width: 56, height: 56)
+                            Image(systemName: sectionData[selectedSection].icon)
+                                .font(.system(size: 24))
+                                .foregroundColor(sectionData[selectedSection].color)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(sectionData[selectedSection].title)
+                                .font(.system(size: 28, weight: .bold))
+                            Text(sectionSubtitle)
+                                .font(.system(size: 14))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.bottom, 40)
+                    
+                    // Content
+                    Group {
+                        switch selectedSection {
+                        case 0: intentSection
+                        case 1: dailyFactsSection
+                        case 2: executionSection
+                        case 3: mindSection
+                        case 4: learningSection
+                        case 5: systemSection
+                        default: intentSection
+                        }
+                    }
+                    
+                    // Navigation Buttons
+                    navigationButtons
+                        .padding(.top, 48)
+                }
+                .padding(48)
+                .frame(maxWidth: 700, alignment: .leading)
+            }
+        }
+    }
+    
+    private var sectionSubtitle: String {
+        switch selectedSection {
+        case 0: return "Set your intentions for today"
+        case 1: return "Track your daily metrics"
+        case 2: return "Review what you accomplished"
+        case 3: return "Reflect on your emotions"
+        case 4: return "Capture your learnings"
+        case 5: return "Improve your systems"
+        default: return ""
+        }
+    }
+    
+    private var navigationButtons: some View {
+        HStack {
+            if selectedSection > 0 {
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        selectedSection -= 1
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "chevron.left")
+                        Text("Previous")
+                    }
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Color.secondary.opacity(0.1))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
             
             Spacer()
             
-            // Progress circle
-            ZStack {
-                Circle()
-                    .stroke(Color.purple.opacity(0.2), lineWidth: 4)
-                    .frame(width: 50, height: 50)
-                Circle()
-                    .trim(from: 0, to: entry.completionPercentage / 100)
-                    .stroke(Color.purple, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    .frame(width: 50, height: 50)
-                    .rotationEffect(.degrees(-90))
-            }
-            
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 24))
-                    .foregroundColor(.secondary)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(20)
-        .background(Color(nsColor: NSColor.controlBackgroundColor))
-    }
-    
-    // MARK: - Section Tabs
-    private var sectionTabs: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(0..<sections.count, id: \.self) { index in
-                    Button {
-                        withAnimation { selectedSection = index }
-                    } label: {
-                        Text(sections[index])
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(selectedSection == index ? .white : .secondary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(selectedSection == index ? Color.purple : Color(nsColor: NSColor.controlBackgroundColor))
-                            .clipShape(Capsule())
+            if selectedSection < sectionData.count - 1 {
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        selectedSection += 1
                     }
-                    .buttonStyle(.plain)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("Next")
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(sectionData[selectedSection].color)
+                    .clipShape(Capsule())
                 }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
         }
     }
     
     // MARK: - Intent Section
     private var intentSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            sectionHeader("Intent", icon: "target", color: .purple)
-            
+        VStack(alignment: .leading, spacing: 32) {
             // Top 3 outcomes
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 16) {
                 Text("Top 3 Outcomes")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                 
-                ForEach(0..<3, id: \.self) { index in
-                    HStack(spacing: 12) {
-                        Text("\(index + 1).")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.purple)
-                        TextField("Outcome \(index + 1)", text: Binding(
-                            get: { entry.topOutcomes.indices.contains(index) ? entry.topOutcomes[index] : "" },
-                            set: { newValue in
-                                while entry.topOutcomes.count <= index {
-                                    entry.topOutcomes.append("")
-                                }
-                                entry.topOutcomes[index] = newValue
+                VStack(spacing: 12) {
+                    ForEach(0..<3, id: \.self) { index in
+                        HStack(spacing: 16) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.purple.opacity(0.15))
+                                    .frame(width: 32, height: 32)
+                                Text("\(index + 1)")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundColor(.purple)
                             }
-                        ))
-                        .textFieldStyle(.plain)
-                        .padding(12)
-                        .background(Color(nsColor: NSColor.controlBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                            
+                            TextField("What do you want to achieve?", text: Binding(
+                                get: { entry.topOutcomes.indices.contains(index) ? entry.topOutcomes[index] : "" },
+                                set: { newValue in
+                                    while entry.topOutcomes.count <= index {
+                                        entry.topOutcomes.append("")
+                                    }
+                                    entry.topOutcomes[index] = newValue
+                                }
+                            ))
+                            .font(.system(size: 15))
+                            .textFieldStyle(.plain)
+                            .padding(16)
+                            .background(Color(nsColor: NSColor.controlBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
                     }
                 }
             }
             
             // Must not happen
-            fieldRow("Must Not Happen", text: $entry.mustNotHappen, placeholder: "What must you avoid today?")
+            cleanFieldRow("Must Not Happen", text: $entry.mustNotHappen, placeholder: "What must you avoid today?", icon: "xmark.octagon")
             
             // Energy mode
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("Energy Mode")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                 
                 HStack(spacing: 12) {
                     ForEach(EnergyMode.allCases, id: \.self) { mode in
                         Button {
                             entry.energyMode = mode
                         } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: mode.icon)
+                            VStack(spacing: 8) {
+                                ZStack {
+                                    Circle()
+                                        .fill(entry.energyMode == mode ? mode.color : mode.color.opacity(0.15))
+                                        .frame(width: 48, height: 48)
+                                    Image(systemName: mode.icon)
+                                        .font(.system(size: 20))
+                                        .foregroundColor(entry.energyMode == mode ? .white : mode.color)
+                                }
                                 Text(mode.rawValue)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(entry.energyMode == mode ? mode.color : .secondary)
                             }
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(entry.energyMode == mode ? .white : mode.color)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(entry.energyMode == mode ? mode.color : mode.color.opacity(0.1))
-                            .clipShape(Capsule())
+                            .padding(.vertical, 16)
+                            .padding(.horizontal, 20)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(entry.energyMode == mode ? mode.color.opacity(0.1) : Color.clear)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .strokeBorder(entry.energyMode == mode ? mode.color.opacity(0.3) : Color.secondary.opacity(0.15), lineWidth: 1)
+                                    )
+                            )
                         }
                         .buttonStyle(.plain)
                     }
@@ -6778,38 +6976,34 @@ struct JournalEditorView: View {
             }
             
             // Main constraint
-            fieldRow("Main Constraint", text: $entry.mainConstraint, placeholder: "What's your biggest limitation today?")
-            
-            // Today's tasks (auto-linked)
-            todayTasksCard
+            cleanFieldRow("Main Constraint", text: $entry.mainConstraint, placeholder: "What's your biggest limitation?", icon: "exclamationmark.triangle")
         }
     }
     
     private var todayTasksCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Today's Tasks (Auto-linked)")
+            Text("Today's Tasks")
                 .font(.system(size: 14, weight: .semibold))
             
             let todayTasks = taskManager.todayTasks.filter { !$0.isCompleted && $0.type != .meeting }
             
             if todayTasks.isEmpty {
-                Text("No tasks scheduled for today")
-                    .font(.system(size: 13))
+                Text("No tasks scheduled")
+                    .font(.system(size: 14))
                     .foregroundColor(.secondary)
-                    .padding(12)
             } else {
                 ForEach(todayTasks.prefix(5)) { task in
-                    HStack(spacing: 8) {
-                        Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor(task.isCompleted ? .green : .secondary)
+                    HStack(spacing: 10) {
+                        Circle()
+                            .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 2)
+                            .frame(width: 20, height: 20)
                         Text(task.title)
-                            .font(.system(size: 13))
-                            .strikethrough(task.isCompleted)
+                            .font(.system(size: 14))
                     }
                 }
             }
         }
-        .padding(16)
+        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.blue.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -6817,240 +7011,202 @@ struct JournalEditorView: View {
     
     // MARK: - Daily Facts Section
     private var dailyFactsSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            sectionHeader("Daily Facts", icon: "chart.bar.fill", color: .blue)
-            
-            // Sleep
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Sleep Hours")
-                        .font(.system(size: 14, weight: .semibold))
-                    HStack {
-                        TextField("Hours", value: $entry.sleepHours, format: .number)
-                            .textFieldStyle(.plain)
-                            .frame(width: 60)
-                            .padding(8)
-                            .background(Color(nsColor: NSColor.controlBackgroundColor))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                        Text("hours")
-                            .foregroundColor(.secondary)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 32) {
+            // Sleep Section
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Sleep")
+                    .font(.system(size: 16, weight: .semibold))
                 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Sleep Quality")
-                        .font(.system(size: 14, weight: .semibold))
-                    HStack(spacing: 8) {
-                        ForEach(1...5, id: \.self) { rating in
-                            Button {
-                                entry.sleepQuality = rating
-                            } label: {
-                                Image(systemName: rating <= (entry.sleepQuality ?? 0) ? "star.fill" : "star")
-                                    .foregroundColor(.yellow)
+                HStack(spacing: 32) {
+                    // Hours
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Hours")
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                        HStack(spacing: 8) {
+                            TextField("0", value: $entry.sleepHours, format: .number)
+                                .font(.system(size: 24, weight: .semibold))
+                                .textFieldStyle(.plain)
+                                .frame(width: 60)
+                                .multilineTextAlignment(.center)
+                                .padding(.vertical, 12)
+                                .background(Color(nsColor: NSColor.controlBackgroundColor))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            Text("hrs")
+                                .font(.system(size: 15))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    // Quality
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Quality")
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                        HStack(spacing: 6) {
+                            ForEach(1...5, id: \.self) { rating in
+                                Button {
+                                    entry.sleepQuality = rating
+                                } label: {
+                                    Image(systemName: rating <= (entry.sleepQuality ?? 0) ? "star.fill" : "star")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(rating <= (entry.sleepQuality ?? 0) ? .yellow : .secondary.opacity(0.3))
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                 }
             }
             
-            fieldRow("Work Blocks", text: $entry.workBlocks, placeholder: "How many deep work blocks?")
-            fieldRow("Key Actions", text: $entry.keyActions, placeholder: "What were your main actions?")
-            fieldRow("Movement", text: $entry.movement, placeholder: "Exercise, steps, activity...")
-            fieldRow("Food Note", text: $entry.foodNote, placeholder: "What did you eat?")
-            fieldRow("Distraction Note", text: $entry.distractionNote, placeholder: "What distracted you?")
-            fieldRow("Money (non-routine)", text: $entry.moneyNote, placeholder: "Any non-routine spending?")
+            cleanFieldRow("Work Blocks", text: $entry.workBlocks, placeholder: "How many deep work sessions?", icon: "square.stack.3d.up")
+            cleanFieldRow("Key Actions", text: $entry.keyActions, placeholder: "Your main accomplishments", icon: "bolt.fill")
+            cleanFieldRow("Movement", text: $entry.movement, placeholder: "Exercise, walks, activity", icon: "figure.walk")
+            cleanFieldRow("Food", text: $entry.foodNote, placeholder: "What did you eat?", icon: "leaf.fill")
+            cleanFieldRow("Distractions", text: $entry.distractionNote, placeholder: "What pulled your focus?", icon: "exclamationmark.bubble")
+            cleanFieldRow("Spending", text: $entry.moneyNote, placeholder: "Any notable expenses?", icon: "creditcard")
         }
     }
     
     // MARK: - Execution Section
     private var executionSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            sectionHeader("Execution Review", icon: "checkmark.seal.fill", color: .green)
-            
-            // Completed tasks card
-            completedTasksCard
-            
-            fieldRow("Planned vs Did", text: $entry.plannedVsDid, placeholder: "Compare what you planned vs what happened...")
-            fieldRow("Biggest Win", text: $entry.biggestWin, placeholder: "What was your biggest achievement today?")
-            fieldRow("Biggest Miss", text: $entry.biggestMiss, placeholder: "What did you miss or fail at?")
-            fieldRow("Root Cause", text: $entry.rootCause, placeholder: "Why did the miss happen?")
-            fieldRow("Fix for Tomorrow", text: $entry.fixForTomorrow, placeholder: "How will you prevent this tomorrow?")
-        }
-    }
-    
-    private var completedTasksCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Completed Today")
-                .font(.system(size: 14, weight: .semibold))
-            
-            let completed = taskManager.todayTasks.filter { $0.isCompleted }
-            let missed = taskManager.todayTasks.filter { !$0.isCompleted && $0.type != .meeting }
-            
-            HStack(spacing: 24) {
-                VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 32) {
+            // Task Summary Cards
+            HStack(spacing: 16) {
+                let completed = taskManager.todayTasks.filter { $0.isCompleted }
+                let missed = taskManager.todayTasks.filter { !$0.isCompleted && $0.type != .meeting }
+                
+                // Completed Card
+                VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 20))
                             .foregroundColor(.green)
-                        Text("\(completed.count) Done")
-                            .font(.system(size: 16, weight: .bold))
+                        Text("\(completed.count)")
+                            .font(.system(size: 28, weight: .bold))
                     }
-                    ForEach(completed.prefix(3)) { task in
-                        Text("- \(task.title)")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                    }
+                    Text("Completed")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
                 }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.green.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
                 
-                VStack(alignment: .leading) {
+                // Missed Card
+                VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20))
                             .foregroundColor(.red)
-                        Text("\(missed.count) Missed")
-                            .font(.system(size: 16, weight: .bold))
+                        Text("\(missed.count)")
+                            .font(.system(size: 28, weight: .bold))
                     }
-                    ForEach(missed.prefix(3)) { task in
-                        Text("- \(task.title)")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                    }
+                    Text("Missed")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
                 }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.red.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
             }
+            
+            cleanFieldRow("Planned vs Actual", text: $entry.plannedVsDid, placeholder: "How did reality compare to your plan?", icon: "arrow.left.arrow.right")
+            cleanFieldRow("Biggest Win", text: $entry.biggestWin, placeholder: "What are you most proud of?", icon: "trophy.fill")
+            cleanFieldRow("Biggest Miss", text: $entry.biggestMiss, placeholder: "Where did you fall short?", icon: "arrow.down.circle")
+            cleanFieldRow("Root Cause", text: $entry.rootCause, placeholder: "Why did this happen?", icon: "magnifyingglass")
+            cleanFieldRow("Tomorrow's Fix", text: $entry.fixForTomorrow, placeholder: "How will you improve?", icon: "arrow.up.forward")
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.green.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
     
     // MARK: - Mind Section
     private var mindSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            sectionHeader("Mind & Emotion", icon: "brain.head.profile", color: .pink)
-            
-            fieldRow("Dominant Emotion", text: $entry.dominantEmotion, placeholder: "What emotion dominated your day?")
-            fieldRow("Trigger", text: $entry.emotionTrigger, placeholder: "What triggered this emotion?")
-            fieldRow("Automatic Reaction", text: $entry.automaticReaction, placeholder: "How did you react automatically?")
-            fieldRow("Better Response", text: $entry.betterResponse, placeholder: "What would be a better response?")
+        VStack(alignment: .leading, spacing: 32) {
+            cleanFieldRow("Dominant Emotion", text: $entry.dominantEmotion, placeholder: "What feeling defined your day?", icon: "heart.fill")
+            cleanFieldRow("Trigger", text: $entry.emotionTrigger, placeholder: "What caused this feeling?", icon: "bolt.heart")
+            cleanFieldRow("Automatic Reaction", text: $entry.automaticReaction, placeholder: "How did you instinctively respond?", icon: "arrow.uturn.backward")
+            cleanFieldRow("Better Response", text: $entry.betterResponse, placeholder: "What would be more effective?", icon: "lightbulb.fill")
         }
     }
     
     // MARK: - Learning Section
     private var learningSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            sectionHeader("Learning", icon: "lightbulb.fill", color: .yellow)
-            
-            fieldRow("One Thing Learned", text: $entry.oneLearned, placeholder: "What's one thing you learned today?")
-            fieldRow("Source", text: $entry.learningSource, placeholder: "Where did you learn this?")
-            fieldRow("How I'll Apply It", text: $entry.howToApply, placeholder: "How will you use this knowledge?")
+        VStack(alignment: .leading, spacing: 32) {
+            cleanFieldRow("One Thing Learned", text: $entry.oneLearned, placeholder: "What new insight did you gain?", icon: "brain")
+            cleanFieldRow("Source", text: $entry.learningSource, placeholder: "Where did this come from?", icon: "book.fill")
+            cleanFieldRow("Application", text: $entry.howToApply, placeholder: "How will you use this?", icon: "hammer.fill")
         }
     }
     
     // MARK: - System Section
     private var systemSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            sectionHeader("System Improvement", icon: "gearshape.2.fill", color: .orange)
-            
-            // Rules status card
-            rulesStatusCard
-            
-            fieldRow("System That Failed", text: $entry.systemFailed, placeholder: "What system or process didn't work?")
-            fieldRow("Why It Failed", text: $entry.whyFailed, placeholder: "Why did the system fail?")
-            fieldRow("System Fix", text: $entry.systemFix, placeholder: "How will you improve the system?")
-        }
-    }
-    
-    private var rulesStatusCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Today's Rules Status")
-                .font(.system(size: 14, weight: .semibold))
-            
-            let completed = ruleManager.dailyRules.filter { $0.isCompletedForPeriod }
-            let missed = ruleManager.dailyRules.filter { !$0.isCompletedForPeriod }
-            
-            HStack(spacing: 24) {
-                VStack(alignment: .leading) {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                        Text("\(completed.count) Followed")
-                            .font(.system(size: 16, weight: .bold))
-                    }
-                    ForEach(completed.prefix(3)) { rule in
-                        Text("- \(rule.title)")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 32) {
+            // Rules Status
+            HStack(spacing: 16) {
+                let completed = ruleManager.dailyRules.filter { $0.isCompletedForPeriod }
+                let missed = ruleManager.dailyRules.filter { !$0.isCompletedForPeriod }
                 
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.red)
-                        Text("\(missed.count) Broken")
-                            .font(.system(size: 16, weight: .bold))
+                        Image(systemName: "checkmark.shield.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.green)
+                        Text("\(completed.count)")
+                            .font(.system(size: 28, weight: .bold))
                     }
-                    ForEach(missed.prefix(3)) { rule in
-                        Text("- \(rule.title)")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                    }
+                    Text("Rules Followed")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
                 }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.green.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "xmark.shield.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.orange)
+                        Text("\(missed.count)")
+                            .font(.system(size: 28, weight: .bold))
+                    }
+                    Text("Rules Broken")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
             }
+            
+            cleanFieldRow("System That Failed", text: $entry.systemFailed, placeholder: "What process broke down?", icon: "gearshape.2")
+            cleanFieldRow("Why It Failed", text: $entry.whyFailed, placeholder: "What was the root cause?", icon: "questionmark.circle")
+            cleanFieldRow("System Fix", text: $entry.systemFix, placeholder: "How will you redesign it?", icon: "wrench.and.screwdriver")
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
     
-    // MARK: - Footer
-    private var editorFooter: some View {
-        HStack {
-            Text("Auto-saved")
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-            
-            Spacer()
-            
-            Button {
-                journalManager.updateEntry(entry)
-                dismiss()
-            } label: {
-                Text("Save & Close")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 10)
-                    .background(Color.purple)
-                    .clipShape(Capsule())
+    // MARK: - Clean Field Row
+    private func cleanFieldRow(_ label: String, text: Binding<String>, placeholder: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+                Text(label)
+                    .font(.system(size: 16, weight: .semibold))
             }
-            .buttonStyle(.plain)
-        }
-        .padding(20)
-        .background(Color(nsColor: NSColor.controlBackgroundColor))
-    }
-    
-    // MARK: - Helpers
-    private func sectionHeader(_ title: String, icon: String, color: Color) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 20))
-                .foregroundColor(color)
-            Text(title)
-                .font(.system(size: 20, weight: .bold))
-        }
-    }
-    
-    private func fieldRow(_ label: String, text: Binding<String>, placeholder: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(label)
-                .font(.system(size: 14, weight: .semibold))
+            
             TextField(placeholder, text: text, axis: .vertical)
+                .font(.system(size: 15))
                 .textFieldStyle(.plain)
-                .padding(12)
+                .padding(16)
+                .frame(minHeight: 52)
                 .background(Color(nsColor: NSColor.controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
 }
