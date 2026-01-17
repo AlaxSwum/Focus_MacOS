@@ -5551,16 +5551,21 @@ struct LargeRuleRow: View {
     
     var body: some View {
         Button {
-            if !rule.isCompletedForPeriod {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                    showCompletion = true
-                }
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                showCompletion = true
+            }
+            
+            if rule.isCompletedForPeriod {
+                // Uncheck
+                ruleManager.decrementRule(rule)
+            } else {
+                // Check
                 ruleManager.incrementRule(rule)
-                
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    withAnimation {
-                        showCompletion = false
-                    }
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                withAnimation {
+                    showCompletion = false
                 }
             }
         } label: {
@@ -5811,12 +5816,15 @@ struct RuleCheckRow: View {
     }
     
     private func handleCheck() {
-        // Allow clicking if not yet completed
-        guard !rule.isCompletedForPeriod else { return }
-        
         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
             showCheckAnimation = true
-            ruleManager.incrementRule(rule)
+            if rule.isCompletedForPeriod {
+                // Uncheck
+                ruleManager.decrementRule(rule)
+            } else {
+                // Check
+                ruleManager.incrementRule(rule)
+            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             showCheckAnimation = false
@@ -5969,10 +5977,13 @@ struct FullRuleRow: View {
     }
     
     private func handleCheck() {
-        guard rule.currentCount < rule.targetCount else { return }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
             showAnimation = true
-            ruleManager.incrementRule(rule)
+            if rule.isCompletedForPeriod {
+                ruleManager.decrementRule(rule)
+            } else {
+                ruleManager.incrementRule(rule)
+            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             showAnimation = false

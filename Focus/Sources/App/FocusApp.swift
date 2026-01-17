@@ -105,6 +105,31 @@ class RuleManager: ObservableObject {
         }
     }
     
+    func decrementRule(_ rule: Rule) {
+        guard let index = rules.firstIndex(where: { $0.id == rule.id }) else { return }
+        var updatedRule = rules[index]
+        if updatedRule.currentCount > 0 {
+            // If was completed, reverse the completion bonus
+            if updatedRule.currentCount >= updatedRule.targetCount {
+                updatedRule.streakCount = max(0, updatedRule.streakCount - 1)
+                userStats.totalRulesCompleted = max(0, userStats.totalRulesCompleted - 1)
+                let bonusPoints = updatedRule.pointsForCompletion
+                updatedRule.totalPoints = max(0, updatedRule.totalPoints - bonusPoints)
+                userStats.totalPoints = max(0, userStats.totalPoints - bonusPoints)
+            }
+            
+            // Decrement count and remove points
+            updatedRule.currentCount -= 1
+            let points = 10 * updatedRule.period.pointsMultiplier
+            updatedRule.totalPoints = max(0, updatedRule.totalPoints - points)
+            userStats.totalPoints = max(0, userStats.totalPoints - points)
+            
+            userStats.currentLevel = userStats.totalPoints / 100
+            rules[index] = updatedRule
+            saveToLocalStorage()
+        }
+    }
+    
     func checkAndResetPeriods() {
         let now = Date()
         let calendar = Calendar.current
@@ -992,7 +1017,7 @@ struct MenuBarDropdownView: View {
     @State private var selectedTab = 0
     @State private var todaySubTab = 0  // 0 = Upcoming, 1 = Completed
     @State private var checklistSubTab = 0  // 0 = To Do, 1 = Rules
-    @State private var selectedRulePeriod = 0  // 0 = All, 1 = Daily, 2 = Weekly, 3 = Monthly
+    @State private var selectedRulePeriod = 0  // 0 = Daily, 1 = Weekly, 2 = Monthly, 3 = Yearly
     @State private var selectedMeeting: TaskItem?
     @State private var tabDirection: Int = 0
     @State private var isHoveringFooter = false
@@ -1841,18 +1866,17 @@ extension MenuBarDropdownView {
         .buttonStyle(.plain)
     }
     
-    // MARK: - Rules Content
+    // MARK: - Rules Content with Mini Tabs
     private var rulesContent: some View {
         VStack(spacing: 0) {
-            // Stats header with completion percentage
-            rulesStatsHeader
+            // Mini period tabs (Daily, Weekly, Monthly, Yearly)
+            rulesPeriodMiniTabs
             
-            // Period filter tabs
-            rulesPeriodTabs
+            // Stats header
+            rulesStatsHeader
             
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    // Filter rules by selected period
                     let filteredRules = filteredRulesByPeriod
                     
                     if filteredRules.isEmpty {
@@ -1900,47 +1924,43 @@ extension MenuBarDropdownView {
         }
     }
     
-    // Period filter tabs
-    private var rulesPeriodTabs: some View {
-        HStack(spacing: 6) {
+    // Mini period tabs - Daily, Weekly, Monthly, Yearly only
+    private var rulesPeriodMiniTabs: some View {
+        HStack(spacing: 4) {
             ForEach(0..<4) { index in
-                let title = ["All", "Daily", "Weekly", "Monthly"][index]
-                let icon = ["list.bullet", "sun.max", "calendar.badge.clock", "calendar"][index]
-                let color: Color = [.gray, .orange, .blue, .purple][index]
+                let title = ["Daily", "Weekly", "Monthly", "Yearly"][index]
+                let color: Color = [.orange, .blue, .purple, .pink][index]
                 
                 Button {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         selectedRulePeriod = index
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: icon)
-                            .font(.system(size: 10))
-                        Text(title)
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                    .foregroundColor(selectedRulePeriod == index ? .white : color)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        selectedRulePeriod == index ? color : color.opacity(0.1)
-                    )
-                    .clipShape(Capsule())
+                    Text(title)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(selectedRulePeriod == index ? .white : color)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            selectedRulePeriod == index ? color : color.opacity(0.12)
+                        )
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
     }
     
-    // Filter rules by selected period
+    // Filter rules by selected period (0=Daily, 1=Weekly, 2=Monthly, 3=Yearly)
     private var filteredRulesByPeriod: [Rule] {
         switch selectedRulePeriod {
-        case 1: return ruleManager.dailyRules
-        case 2: return ruleManager.weeklyRules
-        case 3: return ruleManager.monthlyRules
-        default: return ruleManager.rules
+        case 0: return ruleManager.dailyRules
+        case 1: return ruleManager.weeklyRules
+        case 2: return ruleManager.monthlyRules
+        case 3: return ruleManager.yearlyRules
+        default: return ruleManager.dailyRules
         }
     }
     
@@ -5434,18 +5454,22 @@ struct RuleRowView: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Progress circle / Check button
-                            Button {
-                if rule.currentCount < rule.targetCount {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                        showCheckAnimation = true
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        ruleManager.incrementRule(rule)
-                        showCheckAnimation = false
-                    }
+            // Progress circle / Check button - tap to toggle
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    showCheckAnimation = true
                 }
-                            } label: {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    if rule.isCompletedForPeriod {
+                        // Uncheck - decrement
+                        ruleManager.decrementRule(rule)
+                    } else {
+                        // Check - increment
+                        ruleManager.incrementRule(rule)
+                    }
+                    showCheckAnimation = false
+                }
+            } label: {
                 ZStack {
                     // Background circle
                     Circle()
@@ -5461,7 +5485,7 @@ struct RuleRowView: View {
                     
                     // Center content
                     if rule.isCompletedForPeriod {
-                                    Image(systemName: "checkmark")
+                        Image(systemName: "checkmark")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(rule.color)
                             .scaleEffect(showCheckAnimation ? 1.3 : 1.0)
@@ -5471,8 +5495,8 @@ struct RuleRowView: View {
                             .foregroundColor(rule.color)
                     }
                 }
-                            }
-                            .buttonStyle(.plain)
+            }
+            .buttonStyle(.plain)
             
             // Rule info
             VStack(alignment: .leading, spacing: 3) {
