@@ -4179,7 +4179,7 @@ struct MeetingPopupView: View {
         guard let meetingId = Int(meeting.originalId) else { return }
         
         Task {
-            guard let url = URL(string: "\(supabaseURL)/rest/v1/meetings?id=eq.\(meetingId)&select=attendees_list") else { return }
+            guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?id=eq.\(meetingId)&select=attendees_list") else { return }
             
             var request = URLRequest(url: url)
             request.setValue(supabaseKey, forHTTPHeaderField: "apikey")
@@ -4215,7 +4215,7 @@ struct MeetingPopupView: View {
     }
     
     private func performDelete() async {
-        guard let url = URL(string: "\(supabaseURL)/rest/v1/meetings?id=eq.\(meeting.originalId)") else { return }
+        guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?id=eq.\(meeting.originalId)") else { return }
         
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
@@ -5020,8 +5020,8 @@ struct AddMeetingSheet: View {
         var meetingData: [String: Any] = [
             "user_id": userId,
             "title": title,
-            "meeting_date": dateFormatter.string(from: meetingDate),
-            "start_time": startTimeStr,
+            "date": dateFormatter.string(from: meetingDate),
+            "time": startTimeStr,
             "end_time": endTimeStr,
             "duration": duration,
             "completed": false
@@ -5033,12 +5033,11 @@ struct AddMeetingSheet: View {
         if !agendaItems.isEmpty { meetingData["agenda_items"] = agendaItems }
         if selectedProject > 0 {
             meetingData["project_id"] = selectedProject
-            meetingData["project_name"] = projects.first { $0.id == selectedProject }?.name ?? ""
         }
         if reminderMinutes > 0 { meetingData["reminder_time"] = reminderMinutes }
         meetingData["is_recurring"] = isRecurring
         
-        guard let url = URL(string: "\(supabaseURL)/rest/v1/meetings") else { return }
+        guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting") else { return }
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
