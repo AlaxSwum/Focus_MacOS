@@ -261,25 +261,57 @@ class TaskManager: ObservableObject {
     
     private func fetchTimeBlocks(userId: Int, date: String, dayOfWeek: Int) async -> [TimeBlock] {
         do {
-            // Fetch today's blocks
-            let todayURL = URL(string: "\(supabaseURL)/rest/v1/time_blocks?user_id=eq.\(userId)&date=eq.\(date)&select=*")!
-            let todayBlocks = try await fetchFromSupabase(url: todayURL, type: [TimeBlock].self) ?? []
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            let today = dateFormatter.date(from: date) ?? Date()
+            
+            // Calculate date range for the week (past 7 days + next 7 days)
+            let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: today)!
+            let weekLater = Calendar.current.date(byAdding: .day, value: 7, to: today)!
+            let weekAgoStr = dateFormatter.string(from: weekAgo)
+            let weekLaterStr = dateFormatter.string(from: weekLater)
+            
+            // Fetch blocks for the entire 2-week range
+            let rangeURL = URL(string: "\(supabaseURL)/rest/v1/time_blocks?user_id=eq.\(userId)&date=gte.\(weekAgoStr)&date=lte.\(weekLaterStr)&select=*")!
+            let rangeBlocks = try await fetchFromSupabase(url: rangeURL, type: [TimeBlock].self) ?? []
             
             // Fetch recurring blocks
             let recurringURL = URL(string: "\(supabaseURL)/rest/v1/time_blocks?user_id=eq.\(userId)&is_recurring=eq.true&select=*")!
             let recurringBlocks = try await fetchFromSupabase(url: recurringURL, type: [TimeBlock].self) ?? []
             
-            // Filter recurring blocks for today
-            let todayRecurring = recurringBlocks.filter { block in
-                guard let days = block.recurringDays else { return false }
-                return days.contains(dayOfWeek)
-            }.map { block in
-                var updated = block
-                updated.date = date
-                return updated
+            // Expand recurring blocks for each day in the range
+            var expandedRecurring: [TimeBlock] = []
+            var currentDate = weekAgo
+            while currentDate <= weekLater {
+                let currentDayOfWeek = Calendar.current.component(.weekday, from: currentDate) - 1
+                let currentDateStr = dateFormatter.string(from: currentDate)
+                
+                for block in recurringBlocks {
+                    if let days = block.recurringDays, days.contains(currentDayOfWeek) {
+                        var expanded = block
+                        expanded.date = currentDateStr
+                        // Create unique ID for this recurring instance
+                        expanded.id = "\(block.id)-\(currentDateStr)"
+                        expandedRecurring.append(expanded)
+                    }
+                }
+                currentDate = Calendar.current.date(byAdding: .day, value: 1, to: currentDate)!
             }
             
-            return todayBlocks + todayRecurring
+            // Merge and deduplicate (prefer specific date blocks over recurring)
+            var blockDict: [String: TimeBlock] = [:]
+            for block in expandedRecurring {
+                let key = "\(block.date)-\(block.title)-\(block.startTime)"
+                blockDict[key] = block
+            }
+            for block in rangeBlocks {
+                let key = "\(block.date)-\(block.title)-\(block.startTime)"
+                blockDict[key] = block // Override recurring with specific
+            }
+            
+            let result = Array(blockDict.values)
+            print("Fetched \(result.count) time blocks for week view")
+            return result
         } catch {
             print("Failed to fetch time blocks: \(error)")
             return []
@@ -288,35 +320,29 @@ class TaskManager: ObservableObject {
     
     private func fetchMeetings(date: String) async -> [Meeting] {
         do {
-            // Calculate tomorrow's date
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "yyyy-MM-dd"
             let today = dateFormatter.date(from: date) ?? Date()
-            let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
-            let tomorrowStr = dateFormatter.string(from: tomorrow)
             
-            // Fetch meetings for today
-            let todayUrl = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?date=eq.\(date)&select=*")!
-            let todayMeetings = try await fetchFromSupabase(url: todayUrl, type: [Meeting].self) ?? []
+            // Fetch past meetings (last 30 days)
+            let monthAgo = Calendar.current.date(byAdding: .day, value: -30, to: today)!
+            let monthAgoStr = dateFormatter.string(from: monthAgo)
+            let pastUrl = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?date=gte.\(monthAgoStr)&date=lt.\(date)&order=date.desc&select=*")!
+            let pastMeetings = try await fetchFromSupabase(url: pastUrl, type: [Meeting].self) ?? []
             
-            // Fetch meetings for tomorrow
-            let tomorrowUrl = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?date=eq.\(tomorrowStr)&select=*")!
-            let tomorrowMeetings = try await fetchFromSupabase(url: tomorrowUrl, type: [Meeting].self) ?? []
-            
-            // Fetch upcoming meetings (next 7 days)
-            let weekLater = Calendar.current.date(byAdding: .day, value: 7, to: today)!
-            let weekLaterStr = dateFormatter.string(from: weekLater)
-            let upcomingUrl = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?date=gte.\(date)&date=lte.\(weekLaterStr)&order=date.asc,time.asc&select=*")!
+            // Fetch upcoming meetings (next 90 days for calendar view)
+            let futureDate = Calendar.current.date(byAdding: .day, value: 90, to: today)!
+            let futureDateStr = dateFormatter.string(from: futureDate)
+            let upcomingUrl = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?date=gte.\(date)&date=lte.\(futureDateStr)&order=date.asc,time.asc&select=*")!
             let upcomingMeetings = try await fetchFromSupabase(url: upcomingUrl, type: [Meeting].self) ?? []
             
             // Merge and deduplicate
             var meetingDict: [Int: Meeting] = [:]
-            for meeting in todayMeetings { meetingDict[meeting.id] = meeting }
-            for meeting in tomorrowMeetings { meetingDict[meeting.id] = meeting }
+            for meeting in pastMeetings { meetingDict[meeting.id] = meeting }
             for meeting in upcomingMeetings { meetingDict[meeting.id] = meeting }
             
             let result = Array(meetingDict.values)
-            print("Fetched \(result.count) meetings (today: \(todayMeetings.count), tomorrow: \(tomorrowMeetings.count))")
+            print("Fetched \(result.count) meetings (past: \(pastMeetings.count), upcoming: \(upcomingMeetings.count))")
             return result
         } catch {
             print("Failed to fetch meetings: \(error)")
@@ -354,9 +380,15 @@ class TaskManager: ObservableObject {
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let today = dateFormatter.date(from: date) ?? Date()
         
-        // Convert time blocks
+        // Convert time blocks - use each block's own date
         for block in timeBlocks {
-            if let item = createTaskItem(from: block, date: today) {
+            let blockDate: Date
+            if let parsedDate = dateFormatter.date(from: block.date) {
+                blockDate = parsedDate
+            } else {
+                blockDate = today
+            }
+            if let item = createTaskItem(from: block, date: blockDate) {
                 items.append(item)
             }
         }
@@ -378,10 +410,19 @@ class TaskManager: ObservableObject {
             }
         }
         
-        // Sort by start time
-        items.sort { ($0.startTime ?? Date.distantFuture) < ($1.startTime ?? Date.distantFuture) }
+        // Sort by date then start time
+        items.sort { 
+            if $0.date != $1.date {
+                return $0.date < $1.date
+            }
+            return ($0.startTime ?? Date.distantFuture) < ($1.startTime ?? Date.distantFuture)
+        }
         
-        print("Processed \(items.count) total tasks: \(items.filter { $0.type == .meeting }.count) meetings")
+        let timeBlockCount = items.filter { 
+            if case .timeBlock(_) = $0.type { return true }
+            return false
+        }.count
+        print("Processed \(items.count) total tasks: \(timeBlockCount) time blocks, \(items.filter { $0.type == .meeting }.count) meetings")
         
         todayTasks = items
         completedTasks = items.filter { $0.isCompleted }
