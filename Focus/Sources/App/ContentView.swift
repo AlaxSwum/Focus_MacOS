@@ -2549,12 +2549,15 @@ struct WeekTaskBlock: View {
     let onResizeEnd: (CGFloat) -> Void
     var onMoveEnd: ((CGFloat) -> Void)? = nil
     var onDayChange: ((Int) -> Void)? = nil  // Days offset (-1 = yesterday, +1 = tomorrow)
+    var onDelete: (() -> Void)? = nil  // Delete callback
 
     @State private var isResizing = false
     @State private var resizeDelta: CGFloat = 0
     @State private var isDragging = false
     @State private var dragOffset: CGFloat = 0
     @State private var horizontalOffset: CGFloat = 0
+    @State private var swipeOffset: CGFloat = 0
+    @State private var showDeleteButton = false
 
     private var position: (CGFloat, CGFloat) {
         // Use raw hour/minute values directly
@@ -2717,7 +2720,13 @@ struct WeekTaskBlock: View {
         )
         .padding(.horizontal, 1)
         .offset(y: top + dragOffset)
-        .onTapGesture { onTap() }
+        .contentShape(Rectangle())
+        .highPriorityGesture(
+            TapGesture()
+                .onEnded { _ in
+                    onTap()
+                }
+        )
     }
 }
 
