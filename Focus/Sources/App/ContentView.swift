@@ -2556,8 +2556,8 @@ struct WeekTaskBlock: View {
     @State private var isDragging = false
     @State private var dragOffset: CGFloat = 0
     @State private var horizontalOffset: CGFloat = 0
-    @State private var swipeOffset: CGFloat = 0
-    @State private var showDeleteButton = false
+    @State private var dragStartLocation: CGPoint = .zero
+    @State private var hasMoved = false
 
     private var position: (CGFloat, CGFloat) {
         // Use raw hour/minute values directly
@@ -2651,36 +2651,55 @@ struct WeekTaskBlock: View {
             }
             .contentShape(Rectangle())
             .gesture(
-                DragGesture(minimumDistance: 5)
+                DragGesture(minimumDistance: 8)
                     .onChanged { value in
-                        withAnimation(.interactiveSpring()) {
-                            isDragging = true
-                            dragOffset = value.translation.height
-                            horizontalOffset = value.translation.width
+                        // Track if we've actually moved
+                        if !hasMoved {
+                            let distance = sqrt(pow(value.translation.width, 2) + pow(value.translation.height, 2))
+                            if distance > 8 {
+                                hasMoved = true
+                            }
+                        }
+                        
+                        if hasMoved {
+                            withAnimation(.interactiveSpring()) {
+                                isDragging = true
+                                dragOffset = value.translation.height
+                                horizontalOffset = value.translation.width
+                            }
                         }
                     }
                     .onEnded { value in
-                        let finalVerticalOffset = value.translation.height
-                        let finalHorizontalOffset = value.translation.width
-                        
-                        // Calculate day change based on horizontal movement
-                        let dayChange = Int(round(finalHorizontalOffset / dayWidth))
-                        
-                        if dayChange != 0 {
-                            // Moving to different day
-                            onDayChange?(dayChange)
+                        if hasMoved {
+                            let finalVerticalOffset = value.translation.height
+                            let finalHorizontalOffset = value.translation.width
+                            
+                            // Calculate day change based on horizontal movement
+                            let dayChange = Int(round(finalHorizontalOffset / dayWidth))
+                            
+                            if dayChange != 0 {
+                                // Moving to different day
+                                onDayChange?(dayChange)
+                            }
+                            
+                            // Always apply time change
+                            onMoveEnd?(finalVerticalOffset)
                         }
-                        
-                        // Always apply time change
-                        onMoveEnd?(finalVerticalOffset)
                         
                         withAnimation(.easeOut(duration: 0.2)) {
                             isDragging = false
                             dragOffset = 0
                             horizontalOffset = 0
+                            hasMoved = false
                         }
                     }
             )
+            .onTapGesture {
+                // Only trigger if we haven't been dragging
+                if !isDragging && !isResizing {
+                    onTap()
+                }
+            }
 
             Spacer(minLength: 0)
 
@@ -2720,13 +2739,6 @@ struct WeekTaskBlock: View {
         )
         .padding(.horizontal, 1)
         .offset(y: top + dragOffset)
-        .contentShape(Rectangle())
-        .highPriorityGesture(
-            TapGesture()
-                .onEnded { _ in
-                    onTap()
-                }
-        )
     }
 }
 
