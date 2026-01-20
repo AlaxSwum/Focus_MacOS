@@ -290,10 +290,24 @@ class TaskManager: ObservableObject {
                 
                 for block in recurringBlocks {
                     if let days = block.recurringDays, days.contains(currentDayOfWeek) {
+                        // Skip if this date is in the excluded dates
+                        if let excludedDates = block.excludedDates, excludedDates.contains(currentDateStr) {
+                            continue
+                        }
+                        
+                        // Skip if past the recurring end date
+                        if let endDateStr = block.recurringEndDate,
+                           let endDate = dateFormatter.date(from: endDateStr),
+                           currentDate > endDate {
+                            continue
+                        }
+                        
                         var expanded = block
                         expanded.date = currentDateStr
-                        // Create unique ID for this recurring instance
-                        expanded.id = "\(block.id)-\(currentDateStr)"
+                        // Store original ID before modifying (for deletion purposes)
+                        let originalBlockId = block.id
+                        // Create unique ID for this recurring instance (display only)
+                        expanded.id = "\(originalBlockId)-\(currentDateStr)"
                         expandedRecurring.append(expanded)
                     }
                 }

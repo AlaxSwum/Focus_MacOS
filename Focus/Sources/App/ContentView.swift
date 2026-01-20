@@ -2941,18 +2941,28 @@ struct TaskPopupView: View {
         let supabaseURL = "https://bayyefskgflbyyuwrlgm.supabase.co"
         let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJheXllZnNrZ2ZsYnl5dXdybGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAyNTg0MzAsImV4cCI6MjA2NTgzNDQzMH0.eTr2bOWOO7N7hzRR45qapeQ6V-u2bgV5BbQygZZgGGM"
         
-        // Extract the actual numeric ID (handle recurring blocks with date suffix like "123-2026-01-20")
+        // Extract the actual ID from originalId
+        // For recurring blocks, the ID format is: "uuid-date" (e.g., "abc123-def456-ghij-klmn-opqr7890-2026-01-15")
+        // We need to remove the date suffix (last 10 characters + 1 hyphen = 11 chars for "-yyyy-mm-dd")
         var actualId = task.originalId
         
-        // For time blocks, the ID might have a date suffix for recurring instances
-        if task.originalType == "timeblock" {
-            // Check if ID contains a date suffix (e.g., "123-2026-01-20")
-            let parts = task.originalId.split(separator: "-")
-            if parts.count >= 4 {
-                // It's a recurring block with date suffix, take only the first part
-                actualId = String(parts[0])
+        // For time blocks, check if ID has a date suffix appended for recurring instances
+        if task.originalType == "timeblock" && task.isRecurring {
+            // Date suffix format is "-YYYY-MM-DD" (11 characters including hyphen)
+            // Check if the ID ends with a date pattern
+            let idString = task.originalId
+            if idString.count > 11 {
+                let possibleDate = String(idString.suffix(10))
+                // Check if it matches date format (YYYY-MM-DD)
+                let datePattern = #"^\d{4}-\d{2}-\d{2}$"#
+                if let _ = possibleDate.range(of: datePattern, options: .regularExpression) {
+                    // Remove the date suffix to get the original UUID
+                    actualId = String(idString.dropLast(11))
+                }
             }
-            print("DEBUG: Original ID: \(task.originalId), Actual ID: \(actualId), Mode: \(mode)")
+            print("DEBUG: Original ID: \(task.originalId), Extracted ID: \(actualId), Mode: \(mode)")
+        } else {
+            print("DEBUG: Using original ID directly: \(actualId), isRecurring: \(task.isRecurring)")
         }
         
         // Determine table
@@ -2987,13 +2997,15 @@ struct TaskPopupView: View {
     }
     
     private func addExceptionDate(supabaseURL: String, supabaseKey: String, table: String, id: String) async {
-        // Get today's date in format yyyy-MM-dd
+        // Get the date of this specific occurrence in format yyyy-MM-dd
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
-        let todayStr = dateFormatter.string(from: task.date)
+        let dateToExclude = dateFormatter.string(from: task.date)
         
-        // First, get current exception dates
-        guard let getUrl = URL(string: "\(supabaseURL)/rest/v1/\(table)?id=eq.\(id)&select=exception_dates") else { return }
+        print("DEBUG: Adding excluded date \(dateToExclude) for block \(id)")
+        
+        // First, get current excluded dates
+        guard let getUrl = URL(string: "\(supabaseURL)/rest/v1/\(table)?id=eq.\(id)&select=excluded_dates") else { return }
         
         var getRequest = URLRequest(url: getUrl)
         getRequest.httpMethod = "GET"
@@ -3002,17 +3014,19 @@ struct TaskPopupView: View {
         
         do {
             let (data, _) = try await URLSession.shared.data(for: getRequest)
-            var exceptionDates: [String] = []
+            var excludedDates: [String] = []
+            
+            print("DEBUG: Get excluded_dates response: \(String(data: data, encoding: .utf8) ?? "nil")")
             
             if let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
                let first = json.first,
-               let existing = first["exception_dates"] as? [String] {
-                exceptionDates = existing
+               let existing = first["excluded_dates"] as? [String] {
+                excludedDates = existing
             }
             
-            // Add today's date to exceptions
-            if !exceptionDates.contains(todayStr) {
-                exceptionDates.append(todayStr)
+            // Add this date to excluded dates
+            if !excludedDates.contains(dateToExclude) {
+                excludedDates.append(dateToExclude)
             }
             
             // Update the record
@@ -3024,15 +3038,18 @@ struct TaskPopupView: View {
             updateRequest.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
             updateRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
             
-            let body: [String: Any] = ["exception_dates": exceptionDates]
+            let body: [String: Any] = ["excluded_dates": excludedDates]
             updateRequest.httpBody = try? JSONSerialization.data(withJSONObject: body)
             
-            let (_, response) = try await URLSession.shared.data(for: updateRequest)
+            print("DEBUG: Updating excluded_dates to: \(excludedDates)")
+            
+            let (responseData, response) = try await URLSession.shared.data(for: updateRequest)
             if let httpResponse = response as? HTTPURLResponse {
-                print("DEBUG: Add exception date response: \(httpResponse.statusCode)")
+                print("DEBUG: Add excluded date response: \(httpResponse.statusCode)")
+                print("DEBUG: Response body: \(String(data: responseData, encoding: .utf8) ?? "nil")")
             }
         } catch {
-            print("DEBUG: Failed to add exception date: \(error)")
+            print("DEBUG: Failed to add excluded date: \(error)")
             // Fallback: just delete the whole thing
             await deleteFromDatabase(supabaseURL: supabaseURL, supabaseKey: supabaseKey, table: table, id: id)
         }

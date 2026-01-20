@@ -39,6 +39,8 @@ struct TimeBlock: Codable, Identifiable, Hashable {
     var isCompleted: Bool
     var isRecurring: Bool
     var recurringDays: [Int]?
+    var excludedDates: [String]?  // Dates to skip for recurring blocks
+    var recurringEndDate: String? // End date for recurring blocks
     var checklist: [ChecklistItem]?
     var meetingLink: String?
     var notificationTime: Int?
@@ -57,6 +59,8 @@ struct TimeBlock: Codable, Identifiable, Hashable {
         case isCompleted = "completed"
         case isRecurring = "is_recurring"
         case recurringDays = "recurring_days"
+        case excludedDates = "excluded_dates"
+        case recurringEndDate = "recurring_end_date"
         case checklist
         case meetingLink = "meeting_link"
         case notificationTime = "notification_time"
