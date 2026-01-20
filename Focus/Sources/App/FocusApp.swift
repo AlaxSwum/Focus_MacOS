@@ -4268,14 +4268,18 @@ struct FullAppWindowView: View {
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
                 case 1:
-                    FullMeetingsView()
+                    FullTodoView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
                 case 2:
-                    FullRuleBookView()
+                    FullMeetingsView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
                 case 3:
+                    FullRuleBookView()
+                        .environmentObject(taskManager)
+                        .environmentObject(authManager)
+                case 4:
                     FullJournalView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
@@ -4344,9 +4348,10 @@ struct FullAppWindowView: View {
             // Center section - Tab Selector (prominent)
             HStack(spacing: 4) {
                 tabButton("Personal", icon: "calendar", index: 0)
-                tabButton("Meetings", icon: "video", index: 1)
-                tabButton("Rule Book", icon: "book.closed", index: 2)
-                tabButton("Journal", icon: "book.pages", index: 3)
+                tabButton("To Do", icon: "checklist", index: 1)
+                tabButton("Meetings", icon: "video", index: 2)
+                tabButton("Rule Book", icon: "book.closed", index: 3)
+                tabButton("Journal", icon: "book.pages", index: 4)
             }
             .padding(4)
             .background(
@@ -4365,7 +4370,7 @@ struct FullAppWindowView: View {
             HStack(spacing: 12) {
                 Button {
                     // Open Journaling
-                    withAnimation { selectedTab = 3 }
+                    withAnimation { selectedTab = 4 }
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "book.pages.fill")
@@ -4377,6 +4382,24 @@ struct FullAppWindowView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(Color.purple.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                
+                Button {
+                    // Open To Do page
+                    withAnimation { selectedTab = 1 }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checklist")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("To Do")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.blue)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
                 .buttonStyle(.plain)
