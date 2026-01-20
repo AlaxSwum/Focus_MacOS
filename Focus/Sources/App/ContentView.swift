@@ -2903,8 +2903,29 @@ struct TaskPopupView: View {
         let supabaseURL = "https://bayyefskgflbyyuwrlgm.supabase.co"
         let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJheXllZnNrZ2ZsYnl5dXdybGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAyNTg0MzAsImV4cCI6MjA2NTgzNDQzMH0.eTr2bOWOO7N7hzRR45qapeQ6V-u2bgV5BbQygZZgGGM"
         
-        let table = task.originalType == "meeting" ? "meetings" : "time_blocks"
-        guard let url = URL(string: "\(supabaseURL)/rest/v1/\(table)?id=eq.\(task.originalId)") else { return }
+        // Extract the actual numeric ID (handle recurring blocks with date suffix like "123-2026-01-20")
+        var actualId = task.originalId
+        
+        // For time blocks, the ID might have a date suffix for recurring instances
+        if task.originalType == "timeblock" {
+            // Check if ID contains a date suffix (e.g., "123-2026-01-20")
+            let parts = task.originalId.split(separator: "-")
+            if parts.count >= 4 {
+                // It's a recurring block with date suffix, take only the first part
+                actualId = String(parts[0])
+            }
+            // Also handle if it's already just a number
+            print("DEBUG: Original ID: \(task.originalId), Actual ID: \(actualId)")
+        }
+        
+        let table = task.originalType == "meeting" ? "projects_meeting" : "time_blocks"
+        guard let url = URL(string: "\(supabaseURL)/rest/v1/\(table)?id=eq.\(actualId)") else {
+            print("DEBUG: Failed to create URL for delete")
+            return
+        }
+        
+        print("DEBUG: Deleting from table: \(table), ID: \(actualId)")
+        print("DEBUG: URL: \(url.absoluteString)")
         
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
@@ -2912,12 +2933,20 @@ struct TaskPopupView: View {
         request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
         
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
             if let httpResponse = response as? HTTPURLResponse {
-                print("Delete response: \(httpResponse.statusCode)")
+                print("DEBUG: Delete response status: \(httpResponse.statusCode)")
+                if let responseBody = String(data: data, encoding: .utf8) {
+                    print("DEBUG: Delete response body: \(responseBody)")
+                }
+                if httpResponse.statusCode == 200 || httpResponse.statusCode == 204 {
+                    print("DEBUG: Delete successful!")
+                } else {
+                    print("DEBUG: Delete may have failed with status: \(httpResponse.statusCode)")
+                }
             }
         } catch {
-            print("Failed to delete task: \(error)")
+            print("DEBUG: Failed to delete task: \(error)")
         }
     }
     
