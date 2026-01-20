@@ -1738,36 +1738,31 @@ extension MenuBarDropdownView {
     
     private var todoContent: some View {
         VStack(spacing: 0) {
-            // Filter todos - active (not completed) and completed separately
-            let allTodos = taskManager.todayTasks.filter { $0.type == .todo }
-            let activeTodos = allTodos.filter { !$0.isCompleted }.sorted { task1, task2 in
-                let time1 = task1.endHour * 60 + task1.endMinute
-                let time2 = task2.endHour * 60 + task2.endMinute
-                return time1 < time2
-            }
-            let completedTodos = allTodos.filter { $0.isCompleted }.sorted { task1, task2 in
-                let time1 = task1.endHour * 60 + task1.endMinute
-                let time2 = task2.endHour * 60 + task2.endMinute
-                return time1 < time2
-            }
+            // Filter todos - only show active (not completed) todos
+            // Completed todos are deleted when checked
+            let todos = taskManager.todayTasks.filter { $0.type == .todo && !$0.isCompleted }
+                .sorted { task1, task2 in
+                    let time1 = task1.endHour * 60 + task1.endMinute
+                    let time2 = task2.endHour * 60 + task2.endMinute
+                    return time1 < time2
+                }
             
             ScrollView {
                 VStack(spacing: 8) {
-                    // Active todos
-                    if activeTodos.isEmpty && completedTodos.isEmpty {
+                    if todos.isEmpty {
                         VStack(spacing: 16) {
                             ZStack {
                                 Circle()
                                     .fill(Color.purple.opacity(0.1))
                                     .frame(width: 60, height: 60)
-                                Image(systemName: "checklist")
+                                Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 28))
-                                    .foregroundColor(.purple.opacity(0.6))
+                                    .foregroundColor(.green.opacity(0.6))
                             }
                             VStack(spacing: 4) {
-                                Text("All clear!")
+                                Text("All done!")
                                     .font(.system(size: 14, weight: .semibold))
-                                Text("No todo items yet")
+                                Text("No pending todos")
                                     .font(.system(size: 12))
                                     .foregroundColor(.secondary)
                             }
@@ -1776,52 +1771,12 @@ extension MenuBarDropdownView {
                         .padding(.vertical, 40)
                         .transition(.scale.combined(with: .opacity))
                     } else {
-                        // Active todos section
-                        ForEach(activeTodos) { task in
+                        ForEach(todos) { task in
                             taskRow(task)
                                 .transition(.asymmetric(
                                     insertion: .move(edge: .top).combined(with: .opacity),
                                     removal: .move(edge: .trailing).combined(with: .opacity)
                                 ))
-                        }
-                        
-                        // Completed section toggle
-                        if !completedTodos.isEmpty {
-                            Button {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    showCompletedTodos.toggle()
-                                }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: showCompletedTodos ? "chevron.down" : "chevron.right")
-                                        .font(.system(size: 10, weight: .semibold))
-                                    Text("Completed (\(completedTodos.count))")
-                                        .font(.system(size: 12, weight: .semibold))
-                                    Spacer()
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.green)
-                                }
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .background(Color.green.opacity(0.05))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.top, 8)
-                            
-                            // Completed todos list
-                            if showCompletedTodos {
-                                ForEach(completedTodos) { task in
-                                    taskRow(task)
-                                        .opacity(0.7)
-                                        .transition(.asymmetric(
-                                            insertion: .move(edge: .top).combined(with: .opacity),
-                                            removal: .scale.combined(with: .opacity)
-                                        ))
-                                }
-                            }
                         }
                     }
                 }
@@ -2401,8 +2356,22 @@ struct TaskRowWithSwipe: View {
             // Main content
             HStack(spacing: 10) {
                 AnimatedCheckbox(isCompleted: taskItem.isCompleted) {
-                    Task {
-                        await taskManager.toggleComplete(task: taskItem)
+                    // For todos: mark complete then delete after animation
+                    if taskItem.type == .todo {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                            isDeleting = true
+                        }
+                        // Delete after animation completes
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            Task {
+                                await taskManager.deleteTask(taskItem)
+                            }
+                        }
+                    } else {
+                        // For other types: just toggle complete
+                        Task {
+                            await taskManager.toggleComplete(task: taskItem)
+                        }
                     }
                 }
                 .frame(width: 28, height: 28)
