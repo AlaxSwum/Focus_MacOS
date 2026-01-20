@@ -324,26 +324,55 @@ class TaskManager: ObservableObject {
             dateFormatter.dateFormat = "yyyy-MM-dd"
             let today = dateFormatter.date(from: date) ?? Date()
             
-            // Fetch past meetings (last 30 days)
-            let monthAgo = Calendar.current.date(byAdding: .day, value: -30, to: today)!
-            let monthAgoStr = dateFormatter.string(from: monthAgo)
-            let pastUrl = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?date=gte.\(monthAgoStr)&date=lt.\(date)&order=date.desc&select=*")!
-            let pastMeetings = try await fetchFromSupabase(url: pastUrl, type: [Meeting].self) ?? []
+            // Fetch ALL meetings without complex filters first
+            let allUrl = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?select=*&order=date.desc")!
             
-            // Fetch upcoming meetings (next 90 days for calendar view)
-            let futureDate = Calendar.current.date(byAdding: .day, value: 90, to: today)!
-            let futureDateStr = dateFormatter.string(from: futureDate)
-            let upcomingUrl = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?date=gte.\(date)&date=lte.\(futureDateStr)&order=date.asc,time.asc&select=*")!
-            let upcomingMeetings = try await fetchFromSupabase(url: upcomingUrl, type: [Meeting].self) ?? []
+            var request = URLRequest(url: allUrl)
+            request.httpMethod = "GET"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(supabaseKey, forHTTPHeaderField: "apikey")
+            request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
             
-            // Merge and deduplicate
-            var meetingDict: [Int: Meeting] = [:]
-            for meeting in pastMeetings { meetingDict[meeting.id] = meeting }
-            for meeting in upcomingMeetings { meetingDict[meeting.id] = meeting }
+            let (data, response) = try await URLSession.shared.data(for: request)
             
-            let result = Array(meetingDict.values)
-            print("Fetched \(result.count) meetings (past: \(pastMeetings.count), upcoming: \(upcomingMeetings.count))")
-            return result
+            if let httpResponse = response as? HTTPURLResponse {
+                print("Meetings API response status: \(httpResponse.statusCode)")
+            }
+            
+            // Debug: Print raw JSON
+            if let jsonString = String(data: data, encoding: .utf8) {
+                print("Meetings raw JSON (first 500 chars): \(String(jsonString.prefix(500)))")
+            }
+            
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            
+            do {
+                let allMeetings = try decoder.decode([Meeting].self, from: data)
+                print("Successfully decoded \(allMeetings.count) meetings")
+                
+                // Filter by date range in code
+                let monthAgo = Calendar.current.date(byAdding: .day, value: -30, to: today)!
+                let futureDate = Calendar.current.date(byAdding: .day, value: 90, to: today)!
+                
+                let filtered = allMeetings.filter { meeting in
+                    guard let meetingDate = dateFormatter.date(from: meeting.date) else { return true }
+                    return meetingDate >= monthAgo && meetingDate <= futureDate
+                }
+                
+                print("After date filter: \(filtered.count) meetings")
+                return filtered
+            } catch let decodingError {
+                print("Meeting decoding error: \(decodingError)")
+                // Try to decode as individual items to find the problem
+                if let jsonArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                    print("Raw JSON has \(jsonArray.count) items")
+                    if let first = jsonArray.first {
+                        print("First meeting keys: \(first.keys)")
+                    }
+                }
+                return []
+            }
         } catch {
             print("Failed to fetch meetings: \(error)")
             return []
@@ -460,12 +489,17 @@ class TaskManager: ObservableObject {
     }
     
     private func createTaskItem(from meeting: Meeting, date: Date) -> TaskItem? {
-        guard let (startHour, startMinute) = parseTimeComponents(meeting.time) else {
-            return nil
+        // Handle optional time - default to 09:00 if not set
+        var startHour = 9
+        var startMinute = 0
+        
+        if let timeStr = meeting.time, let (h, m) = parseTimeComponents(timeStr) {
+            startHour = h
+            startMinute = m
         }
         
-        // Calculate end time from duration
-        let totalMinutes = startHour * 60 + startMinute + meeting.duration
+        // Calculate end time from duration (use safeDuration which defaults to 60)
+        let totalMinutes = startHour * 60 + startMinute + meeting.safeDuration
         let endHour = (totalMinutes / 60) % 24
         let endMinute = totalMinutes % 60
         

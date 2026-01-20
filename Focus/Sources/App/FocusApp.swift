@@ -5776,7 +5776,7 @@ struct AddRuleSheet: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-        .background(
+                .background(
                     LinearGradient(
                         colors: title.isEmpty ? [Color.gray] : [selectedColor, selectedColor.opacity(0.8)],
                         startPoint: .leading,
@@ -5892,8 +5892,8 @@ struct AddRuleWindowContent: View {
                                     .padding(.vertical, 12)
                                     .background(selectedPeriod == period ? period.color : period.color.opacity(0.1))
                                     .clipShape(RoundedRectangle(cornerRadius: 10))
-                                }
-                                .buttonStyle(.plain)
+                            }
+                            .buttonStyle(.plain)
                             }
                         }
                     }

@@ -165,8 +165,8 @@ struct Meeting: Codable, Identifiable, Hashable {
     var title: String
     var description: String?
     var date: String
-    var time: String
-    var duration: Int // minutes
+    var time: String?  // Made optional - could be null in DB
+    var duration: Int?  // Made optional - could be null in DB
     var projectId: Int?
     var attendeeIds: [Int]?
     var meetingLink: String?
@@ -174,6 +174,13 @@ struct Meeting: Codable, Identifiable, Hashable {
     var notes: String?
     var location: String?
     var isCompleted: Bool?
+    var userId: Int?
+    var endTime_db: String?  // From database if exists
+    var createdAt: String?
+    var updatedAt: String?
+    var isRecurring: Bool?
+    var reminderTime: Int?
+    var attendeesList: String?
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -189,17 +196,33 @@ struct Meeting: Codable, Identifiable, Hashable {
         case notes
         case location
         case isCompleted = "completed"
+        case userId = "user_id"
+        case endTime_db = "end_time"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case isRecurring = "is_recurring"
+        case reminderTime = "reminder_time"
+        case attendeesList = "attendees_list"
     }
     
     var startTime: Date? {
+        guard let timeStr = time else { return nil }
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
-        return formatter.date(from: "\(date) \(time)")
+        // Handle time format with or without seconds
+        let cleanTime = timeStr.count > 5 ? String(timeStr.prefix(5)) : timeStr
+        return formatter.date(from: "\(date) \(cleanTime)")
     }
     
     var endTime: Date? {
         guard let start = startTime else { return nil }
-        return start.addingTimeInterval(Double(duration) * 60)
+        let dur = duration ?? 60  // Default 60 minutes
+        return start.addingTimeInterval(Double(dur) * 60)
+    }
+    
+    // Safe duration accessor
+    var safeDuration: Int {
+        duration ?? 60
     }
 }
 
