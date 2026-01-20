@@ -338,7 +338,7 @@ struct TaskItem: Identifiable, Hashable, Equatable {
     let id: String
     let title: String
     let description: String?
-    let date: Date
+    var date: Date  // Made mutable for day-change drag
     let startTime: Date?
     let endTime: Date?
     let type: TaskType

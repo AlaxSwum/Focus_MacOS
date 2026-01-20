@@ -1296,6 +1296,7 @@ struct FullCalendarView: View {
                                             WeekTaskBlock(
                                                 task: task,
                                                 hourHeight: hourHeight,
+                                                dayWidth: dayWidth,
                                                 onTap: {
                                                     selectedDate = day
                                                     selectedTask = task
@@ -1308,6 +1309,9 @@ struct FullCalendarView: View {
                                                 onMoveEnd: { delta in
                                                     let minutes = Int(delta / hourHeight * 60)
                                                     moveTask(task, offsetMinutes: minutes)
+                                                },
+                                                onDayChange: { daysOffset in
+                                                    moveTaskToDay(task, daysOffset: daysOffset)
                                                 }
                                             )
                                             .frame(width: columnWidth - 2)
@@ -1714,6 +1718,77 @@ struct FullCalendarView: View {
         }
     }
     
+    // MARK: - Move Task to Different Day
+    private func moveTaskToDay(_ task: TaskItem, daysOffset: Int) {
+        guard daysOffset != 0 else { return }
+        
+        let newDate = Calendar.current.date(byAdding: .day, value: daysOffset, to: task.date) ?? task.date
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let newDateStr = dateFormatter.string(from: newDate)
+        
+        NSLog("MOVE DAY: Task '%@' moving %d days to %@", task.title, daysOffset, newDateStr)
+        
+        // Mark task as being edited
+        taskManager.beginLocalEdit(taskId: task.id)
+        
+        // Update local state immediately
+        if let index = taskManager.todayTasks.firstIndex(where: { $0.id == task.id }) {
+            taskManager.todayTasks[index].date = newDate
+        }
+        
+        // Update database
+        Task {
+            await updateTaskDateInDatabase(task: task, newDateStr: newDateStr)
+            
+            DispatchQueue.main.async { [weak taskManager] in
+                taskManager?.endLocalEdit(taskId: task.id)
+                // Refresh to ensure consistency
+                if let userId = AuthManager.shared.currentUser?.id {
+                    Task {
+                        await taskManager?.fetchTasks(for: userId)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func updateTaskDateInDatabase(task: TaskItem, newDateStr: String) async {
+        let supabaseURL = "https://bayyefskgflbyyuwrlgm.supabase.co"
+        let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJheXllZnNrZ2ZsYnl5dXdybGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAyNTg0MzAsImV4cCI6MjA2NTgzNDQzMH0.eTr2bOWOO7N7hzRR45qapeQ6V-u2bgV5BbQygZZgGGM"
+        
+        let table = task.originalType == "meeting" ? "projects_meeting" : "time_blocks"
+        let updateData: [String: Any] = ["date": newDateStr]
+        
+        guard let url = URL(string: "\(supabaseURL)/rest/v1/\(table)?id=eq.\(task.originalId)") else {
+            NSLog("MOVE DAY DB: Invalid URL")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.setValue(supabaseKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: updateData)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode >= 200 && httpResponse.statusCode < 300 {
+                    NSLog("MOVE DAY DB: Successfully moved task to %@", newDateStr)
+                } else {
+                    let responseStr = String(data: data, encoding: .utf8) ?? "no data"
+                    NSLog("MOVE DAY DB: Error response: %@", responseStr)
+                }
+            }
+        } catch {
+            NSLog("MOVE DAY DB: Failed - %@", error.localizedDescription)
+        }
+    }
+    
     private func updateTaskTimeInDatabaseWithStrings(taskId: String, taskType: String, newStartTimeStr: String, newEndTimeStr: String, completion: @escaping (Bool) -> Void) {
         let supabaseURL = "https://bayyefskgflbyyuwrlgm.supabase.co"
         let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJheXllZnNrZ2ZsYnl5dXdybGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAyNTg0MzAsImV4cCI6MjA2NTgzNDQzMH0.eTr2bOWOO7N7hzRR45qapeQ6V-u2bgV5BbQygZZgGGM"
@@ -1948,12 +2023,12 @@ struct FullCalendarView: View {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         
-        let timeFormatter = DateFormatter()
-        timeFormatter.dateFormat = "HH:mm:ss"
+        // Use stored hour/minute values (add 1 hour for duplicate)
+        let newStartHour = (task.startHour + 1) % 24
+        let newEndHour = (task.endHour + 1) % 24
         
-        // Duplicate to 1 hour later
-        let newStart = (task.startTime ?? Date()).addingTimeInterval(3600)
-        let newEnd = (task.endTime ?? Date()).addingTimeInterval(3600)
+        let startTimeStr = String(format: "%02d:%02d:00", newStartHour, task.startMinute)
+        let endTimeStr = String(format: "%02d:%02d:00", newEndHour, task.endMinute)
         
         // Get the type string based on task type
         let typeString: String
@@ -1971,8 +2046,8 @@ struct FullCalendarView: View {
         var blockData: [String: Any] = [
             "user_id": userId,
             "date": dateFormatter.string(from: task.date),
-            "start_time": timeFormatter.string(from: newStart),
-            "end_time": timeFormatter.string(from: newEnd),
+            "start_time": startTimeStr,
+            "end_time": endTimeStr,
             "title": "\(task.title) (Copy)",
             "type": typeString,
             "completed": false,
@@ -2469,14 +2544,17 @@ struct ResizableTaskBlock: View {
 struct WeekTaskBlock: View {
     let task: TaskItem
     let hourHeight: CGFloat
+    let dayWidth: CGFloat
     let onTap: () -> Void
     let onResizeEnd: (CGFloat) -> Void
     var onMoveEnd: ((CGFloat) -> Void)? = nil
+    var onDayChange: ((Int) -> Void)? = nil  // Days offset (-1 = yesterday, +1 = tomorrow)
 
     @State private var isResizing = false
     @State private var resizeDelta: CGFloat = 0
     @State private var isDragging = false
     @State private var dragOffset: CGFloat = 0
+    @State private var horizontalOffset: CGFloat = 0
 
     private var position: (CGFloat, CGFloat) {
         // Use raw hour/minute values directly
@@ -2518,11 +2596,24 @@ struct WeekTaskBlock: View {
                     .frame(width: 3)
 
                 if isDragging {
-                    Text(getPreviewTime())
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(task.type.color)
-                        .padding(.horizontal, 3)
-                        .padding(.vertical, 2)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(getPreviewTime())
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(task.type.color)
+                        // Show day change indicator
+                        let dayChange = Int(round(horizontalOffset / dayWidth))
+                        if dayChange != 0 {
+                            HStack(spacing: 2) {
+                                Image(systemName: dayChange > 0 ? "arrow.right" : "arrow.left")
+                                    .font(.system(size: 7))
+                                Text("\(abs(dayChange)) day\(abs(dayChange) > 1 ? "s" : "")")
+                                    .font(.system(size: 7))
+                            }
+                            .foregroundColor(.orange)
+                        }
+                    }
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 2)
                 } else if isResizing {
                     Text(getPreviewEndTime())
                         .font(.system(size: 9, weight: .bold))
@@ -2562,14 +2653,28 @@ struct WeekTaskBlock: View {
                         withAnimation(.interactiveSpring()) {
                             isDragging = true
                             dragOffset = value.translation.height
+                            horizontalOffset = value.translation.width
                         }
                     }
                     .onEnded { value in
-                        let finalOffset = value.translation.height
-                        onMoveEnd?(finalOffset)
+                        let finalVerticalOffset = value.translation.height
+                        let finalHorizontalOffset = value.translation.width
+                        
+                        // Calculate day change based on horizontal movement
+                        let dayChange = Int(round(finalHorizontalOffset / dayWidth))
+                        
+                        if dayChange != 0 {
+                            // Moving to different day
+                            onDayChange?(dayChange)
+                        }
+                        
+                        // Always apply time change
+                        onMoveEnd?(finalVerticalOffset)
+                        
                         withAnimation(.easeOut(duration: 0.2)) {
                             isDragging = false
                             dragOffset = 0
+                            horizontalOffset = 0
                         }
                     }
             )

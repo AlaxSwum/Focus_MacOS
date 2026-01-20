@@ -364,12 +364,57 @@ class TaskManager: ObservableObject {
                 return filtered
             } catch let decodingError {
                 print("Meeting decoding error: \(decodingError)")
-                // Try to decode as individual items to find the problem
+                
+                // Try manual parsing as fallback
                 if let jsonArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-                    print("Raw JSON has \(jsonArray.count) items")
+                    print("Raw JSON has \(jsonArray.count) items - trying manual parsing")
                     if let first = jsonArray.first {
                         print("First meeting keys: \(first.keys)")
                     }
+                    
+                    var manualMeetings: [Meeting] = []
+                    for item in jsonArray {
+                        if let id = item["id"] as? Int,
+                           let title = item["title"] as? String,
+                           let date = item["date"] as? String {
+                            let meeting = Meeting(
+                                id: id,
+                                title: title,
+                                description: item["description"] as? String,
+                                date: date,
+                                time: item["time"] as? String,
+                                duration: item["duration"] as? Int,
+                                projectId: item["project_id"] as? Int,
+                                attendeeIds: item["attendee_ids"] as? [Int],
+                                meetingLink: item["meeting_link"] as? String,
+                                agendaItems: item["agenda_items"] as? [String],
+                                notes: item["notes"] as? String,
+                                location: item["location"] as? String,
+                                isCompleted: item["completed"] as? Bool,
+                                userId: item["user_id"] as? Int,
+                                endTime_db: item["end_time"] as? String,
+                                createdAt: item["created_at"] as? String,
+                                updatedAt: item["updated_at"] as? String,
+                                isRecurring: item["is_recurring"] as? Bool,
+                                reminderTime: item["reminder_time"] as? Int,
+                                attendeesList: item["attendees_list"] as? String
+                            )
+                            manualMeetings.append(meeting)
+                        }
+                    }
+                    
+                    print("Manually parsed \(manualMeetings.count) meetings")
+                    
+                    // Filter by date range
+                    let monthAgo = Calendar.current.date(byAdding: .day, value: -30, to: today)!
+                    let futureDate = Calendar.current.date(byAdding: .day, value: 90, to: today)!
+                    
+                    let filtered = manualMeetings.filter { meeting in
+                        guard let meetingDate = dateFormatter.date(from: meeting.date) else { return true }
+                        return meetingDate >= monthAgo && meetingDate <= futureDate
+                    }
+                    
+                    return filtered
                 }
                 return []
             }
