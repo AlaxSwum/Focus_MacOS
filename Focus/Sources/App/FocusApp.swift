@@ -4886,7 +4886,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 class FloatingNotificationManager {
     static let shared = FloatingNotificationManager()
     
-    private var notificationPanel: NSPanel?
+    private var notificationPanel: NSWindow?  // Changed to NSWindow to support both regular windows and panels
     private var keepOnTopTimer: Timer?
     private var taskMonitorTimer: Timer?
     private var notifiedTaskIds: Set<String> = []
@@ -5012,45 +5012,59 @@ class FloatingNotificationManager {
         let endX = screenFrame.maxX - windowWidth - 16
         let windowY = screenFrame.maxY - windowHeight - 8
         
-        // Create a floating panel (like system notifications)
-        let panel = NSPanel(
-            contentRect: NSRect(x: startX, y: windowY, width: windowWidth, height: windowHeight),
-            styleMask: [.borderless, .nonactivatingPanel, .utilityWindow],
-            backing: .buffered,
-            defer: false
-        )
+        // Create a regular NSWindow for action buttons (not NSPanel)
+        // NSWindow handles button clicks better than NSPanel with borderless style
+        let window: NSWindow
+        if hasActions {
+            // Use regular window for action notifications - better button interaction
+            window = NSWindow(
+                contentRect: NSRect(x: startX, y: windowY, width: windowWidth, height: windowHeight),
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+        } else {
+            // Use panel for simple notifications
+            let panel = NSPanel(
+                contentRect: NSRect(x: startX, y: windowY, width: windowWidth, height: windowHeight),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            panel.becomesKeyOnlyIfNeeded = true
+            panel.isFloatingPanel = true
+            window = panel
+        }
         
-        panel.contentView = hostingView
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.level = .floating // Use floating level for better interaction
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        panel.hasShadow = true
-        panel.isMovableByWindowBackground = false  // Disable so clicks work
-        panel.becomesKeyOnlyIfNeeded = false  // Allow becoming key for button clicks
-        panel.hidesOnDeactivate = false
-        panel.alphaValue = 0
-        panel.isFloatingPanel = true
-        panel.acceptsMouseMovedEvents = true
-        panel.worksWhenModal = true  // Work even when modal dialogs are open
+        window.contentView = hostingView
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.level = .popUpMenu  // Higher level to appear above everything
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        window.hasShadow = true
+        window.isMovableByWindowBackground = false
+        window.hidesOnDeactivate = false
+        window.alphaValue = 0
+        window.acceptsMouseMovedEvents = true
         
         // Store reference
-        self.notificationPanel = panel
+        self.notificationPanel = window
         
-        // Show panel (starts off-screen)
-        panel.orderFrontRegardless()
+        // Show window (starts off-screen)
+        window.orderFrontRegardless()
         
-        // Make panel key if it has action buttons so they can be clicked
+        // For action notifications, make key and activate app to enable button clicks
         if hasActions {
-            panel.makeKey()
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
         }
         
         // Smooth slide-in animation from right
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.4
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().setFrameOrigin(NSPoint(x: endX, y: windowY))
-            panel.animator().alphaValue = 1
+            window.animator().setFrameOrigin(NSPoint(x: endX, y: windowY))
+            window.animator().alphaValue = 1
         }
         
         // Cancel any existing monitors/timers
@@ -5066,12 +5080,12 @@ class FloatingNotificationManager {
         // Task reminders have buttons (Done, Snooze, Skip) so don't auto-dismiss on click
         if !hasActions {
             self.clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
-                guard let self = self, let panel = self.notificationPanel else { return event }
+                guard let self = self, let notifWindow = self.notificationPanel else { return event }
                 
-                // Check if click is within the panel
+                // Check if click is within the window
                 let clickLocation = NSEvent.mouseLocation
-                if panel.frame.contains(clickLocation) {
-                    print("DEBUG: Click detected on notification panel - dismissing")
+                if notifWindow.frame.contains(clickLocation) {
+                    print("DEBUG: Click detected on notification - dismissing")
                     self.dismiss()
                     return nil // Consume the event
                 }
@@ -5079,11 +5093,12 @@ class FloatingNotificationManager {
             }
         }
         
-        // Auto-dismiss after duration
+        // Auto-dismiss after duration (longer for action notifications)
+        let autoDismissDuration = hasActions ? max(duration, 60.0) : duration  // Give 60s for action notifications
         let manager = self
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + duration) {
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + autoDismissDuration) {
             DispatchQueue.main.async {
-                print("DEBUG: Auto-dismiss triggered after \(duration)s")
+                print("DEBUG: Auto-dismiss triggered after \(autoDismissDuration)s")
                 manager.dismiss()
             }
         }
