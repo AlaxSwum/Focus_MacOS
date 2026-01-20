@@ -1023,6 +1023,7 @@ struct MenuBarDropdownView: View {
     @State private var isHoveringFooter = false
     @State private var subTabDirection: Int = 0
     @State private var footerPressed = false
+    @State private var showCompletedTodos = false  // Toggle for completed todos section
     // showAddRule removed - now uses floating window
     
     var body: some View {
@@ -1737,44 +1738,98 @@ extension MenuBarDropdownView {
     
     private var todoContent: some View {
         VStack(spacing: 0) {
-            // Todo list
-            let todos = taskManager.todayTasks.filter { $0.type == .todo }.sorted { task1, task2 in
+            // Filter todos - active (not completed) and completed separately
+            let allTodos = taskManager.todayTasks.filter { $0.type == .todo }
+            let activeTodos = allTodos.filter { !$0.isCompleted }.sorted { task1, task2 in
+                let time1 = task1.endHour * 60 + task1.endMinute
+                let time2 = task2.endHour * 60 + task2.endMinute
+                return time1 < time2
+            }
+            let completedTodos = allTodos.filter { $0.isCompleted }.sorted { task1, task2 in
                 let time1 = task1.endHour * 60 + task1.endMinute
                 let time2 = task2.endHour * 60 + task2.endMinute
                 return time1 < time2
             }
             
-            if todos.isEmpty {
-                VStack(spacing: 16) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.purple.opacity(0.1))
-                            .frame(width: 60, height: 60)
-                    Image(systemName: "checklist")
-                            .font(.system(size: 28))
-                            .foregroundColor(.purple.opacity(0.6))
-                    }
-                    VStack(spacing: 4) {
-                        Text("All clear!")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("No todo items yet")
-                            .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+            ScrollView {
+                VStack(spacing: 8) {
+                    // Active todos
+                    if activeTodos.isEmpty && completedTodos.isEmpty {
+                        VStack(spacing: 16) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.purple.opacity(0.1))
+                                    .frame(width: 60, height: 60)
+                                Image(systemName: "checklist")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(.purple.opacity(0.6))
+                            }
+                            VStack(spacing: 4) {
+                                Text("All clear!")
+                                    .font(.system(size: 14, weight: .semibold))
+                                Text("No todo items yet")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                        .transition(.scale.combined(with: .opacity))
+                    } else {
+                        // Active todos section
+                        ForEach(activeTodos) { task in
+                            taskRow(task)
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .top).combined(with: .opacity),
+                                    removal: .move(edge: .trailing).combined(with: .opacity)
+                                ))
+                        }
+                        
+                        // Completed section toggle
+                        if !completedTodos.isEmpty {
+                            Button {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    showCompletedTodos.toggle()
+                                }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: showCompletedTodos ? "chevron.down" : "chevron.right")
+                                        .font(.system(size: 10, weight: .semibold))
+                                    Text("Completed (\(completedTodos.count))")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Spacer()
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.green)
+                                }
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(Color.green.opacity(0.05))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 8)
+                            
+                            // Completed todos list
+                            if showCompletedTodos {
+                                ForEach(completedTodos) { task in
+                                    taskRow(task)
+                                        .opacity(0.7)
+                                        .transition(.asymmetric(
+                                            insertion: .move(edge: .top).combined(with: .opacity),
+                                            removal: .scale.combined(with: .opacity)
+                                        ))
+                                }
+                            }
+                        }
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .transition(.scale.combined(with: .opacity))
-            } else {
-                ForEach(todos) { task in
-                    taskRow(task)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .move(edge: .trailing).combined(with: .opacity)
-                        ))
-                }
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
             }
             
-            Spacer()
+            Spacer(minLength: 0)
             
             // Add Todo Button at bottom with gradient
             Button {
@@ -1804,6 +1859,7 @@ extension MenuBarDropdownView {
             .padding(.bottom, 8)
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: taskManager.todayTasks.count)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showCompletedTodos)
     }
     
     // MARK: - Checklist Content (To Do + Rules)
