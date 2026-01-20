@@ -324,9 +324,9 @@ class TaskManager: ObservableObject {
             dateFormatter.dateFormat = "yyyy-MM-dd"
             let today = dateFormatter.date(from: date) ?? Date()
             
-            // Fetch meetings where user is creator OR is in attendees
-            // Using OR filter: user_id=eq.{userId} or attendee_ids=cs.{[userId]}
-            let allUrl = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?or=(user_id.eq.\(userId),attendee_ids.cs.%7B\(userId)%7D)&select=*&order=date.desc")!
+            // Fetch all meetings and filter by user access in code
+            // (Supabase OR filter with array contains can be tricky)
+            let allUrl = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?select=*&order=date.desc")!
             
             var request = URLRequest(url: allUrl)
             request.httpMethod = "GET"
@@ -361,10 +361,11 @@ class TaskManager: ObservableObject {
                     guard let meetingDate = dateFormatter.date(from: meeting.date) else { return false }
                     let inDateRange = meetingDate >= monthAgo && meetingDate <= futureDate
                     
-                    // Check user access: user created it OR user is in attendees
+                    // Check user access: user created it OR user is in attendees OR no owner set (legacy)
                     let isCreator = meeting.userId == userId
                     let isAttendee = meeting.attendeeIds?.contains(userId) ?? false
-                    let hasAccess = isCreator || isAttendee
+                    let noOwner = meeting.userId == nil  // Legacy meetings with no owner
+                    let hasAccess = isCreator || isAttendee || noOwner
                     
                     return inDateRange && hasAccess
                 }
@@ -423,10 +424,11 @@ class TaskManager: ObservableObject {
                         guard let meetingDate = dateFormatter.date(from: meeting.date) else { return false }
                         let inDateRange = meetingDate >= monthAgo && meetingDate <= futureDate
                         
-                        // Check user access: user created it OR user is in attendees
+                        // Check user access: user created it OR user is in attendees OR no owner set
                         let isCreator = meeting.userId == userId
                         let isAttendee = meeting.attendeeIds?.contains(userId) ?? false
-                        let hasAccess = isCreator || isAttendee
+                        let noOwner = meeting.userId == nil
+                        let hasAccess = isCreator || isAttendee || noOwner
                         
                         return inDateRange && hasAccess
                     }

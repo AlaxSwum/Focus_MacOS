@@ -3977,6 +3977,9 @@ struct MeetingPopupView: View {
     @State private var hasExistingNotes = false
     @State private var isCheckingNotes = true
     @State private var meetingAttendees: [String] = []
+    @State private var isOwner = false  // Whether current user owns this meeting
+    @State private var meetingOwnerId: Int? = nil
+    @State private var meetingAttendeeIds: [Int] = []
     
     private let supabaseURL = "https://bayyefskgflbyyuwrlgm.supabase.co"
     private let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJheXllZnNrZ2ZsYnl5dXdybGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAyNTg0MzAsImV4cCI6MjA2NTgzNDQzMH0.eTr2bOWOO7N7hzRR45qapeQ6V-u2bgV5BbQygZZgGGM"
@@ -4211,11 +4214,15 @@ struct MeetingPopupView: View {
             .background(Color(nsColor: NSColor.controlBackgroundColor))
         }
         .frame(width: 520, height: 600)
-        .alert("Delete Meeting", isPresented: $showDeleteConfirm) {
+        .alert(isOwner ? "Delete Meeting" : "Leave Meeting", isPresented: $showDeleteConfirm) {
             Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) { deleteMeeting() }
+            Button(isOwner ? "Delete" : "Leave", role: .destructive) { deleteMeeting() }
         } message: {
-            Text("Are you sure you want to delete '\(meeting.title)'?")
+            if isOwner {
+                Text("Are you sure you want to delete '\(meeting.title)'? This will remove it for all attendees.")
+            } else {
+                Text("Are you sure you want to leave '\(meeting.title)'? You will be removed from the attendee list.")
+            }
         }
         .sheet(isPresented: $showMeetingNotes) {
             FullMeetingNotesSheet(meeting: meeting)
@@ -4224,6 +4231,7 @@ struct MeetingPopupView: View {
         .onAppear {
             checkForExistingNotes()
             loadAttendees()
+            checkOwnership()
         }
     }
     
@@ -4319,18 +4327,75 @@ struct MeetingPopupView: View {
         }
     }
     
+    private func checkOwnership() {
+        guard let userId = authManager.currentUser?.id else { return }
+        
+        Task {
+            guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?id=eq.\(meeting.originalId)&select=user_id,attendee_ids") else { return }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(supabaseKey, forHTTPHeaderField: "apikey")
+            request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
+            
+            do {
+                let (data, _) = try await URLSession.shared.data(for: request)
+                if let jsonArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+                   let meetingData = jsonArray.first {
+                    let ownerId = meetingData["user_id"] as? Int
+                    let attendees = meetingData["attendee_ids"] as? [Int] ?? []
+                    
+                    await MainActor.run {
+                        self.meetingOwnerId = ownerId
+                        self.meetingAttendeeIds = attendees
+                        self.isOwner = (ownerId == userId) || (ownerId == nil)  // Owner or legacy meeting
+                    }
+                }
+            } catch {
+                print("Failed to check ownership: \(error)")
+            }
+        }
+    }
+    
     private func performDelete() async {
-        guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?id=eq.\(meeting.originalId)") else { return }
+        guard let userId = authManager.currentUser?.id else { return }
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        request.setValue(supabaseKey, forHTTPHeaderField: "apikey")
-        request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
-        
-        do {
-            _ = try await URLSession.shared.data(for: request)
-        } catch {
-            print("Failed to delete meeting: \(error)")
+        if isOwner {
+            // Owner: Delete the meeting entirely
+            guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?id=eq.\(meeting.originalId)") else { return }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "DELETE"
+            request.setValue(supabaseKey, forHTTPHeaderField: "apikey")
+            request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
+            
+            do {
+                _ = try await URLSession.shared.data(for: request)
+                print("Meeting deleted by owner")
+            } catch {
+                print("Failed to delete meeting: \(error)")
+            }
+        } else {
+            // Attendee: Remove self from attendee list
+            let newAttendees = meetingAttendeeIds.filter { $0 != userId }
+            let updateData: [String: Any] = ["attendee_ids": newAttendees]
+            
+            guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?id=eq.\(meeting.originalId)") else { return }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "PATCH"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(supabaseKey, forHTTPHeaderField: "apikey")
+            request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
+            
+            do {
+                request.httpBody = try JSONSerialization.data(withJSONObject: updateData)
+                _ = try await URLSession.shared.data(for: request)
+                print("User \(userId) removed from attendee list")
+            } catch {
+                print("Failed to leave meeting: \(error)")
+            }
         }
     }
 }
