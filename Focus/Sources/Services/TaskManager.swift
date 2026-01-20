@@ -69,7 +69,7 @@ class TaskManager: ObservableObject {
         let dayOfWeek = Calendar.current.component(.weekday, from: Date()) - 1 // 0 = Sunday
         
         async let blocksResult = fetchTimeBlocks(userId: userId, date: today, dayOfWeek: dayOfWeek)
-        async let meetingsResult = fetchMeetings(date: today)
+        async let meetingsResult = fetchMeetings(userId: userId, date: today)
         async let todosResult = fetchTodos(userId: userId)
         
         let (blocks, mtgs, tds) = await (blocksResult, meetingsResult, todosResult)
@@ -318,14 +318,15 @@ class TaskManager: ObservableObject {
         }
     }
     
-    private func fetchMeetings(date: String) async -> [Meeting] {
+    private func fetchMeetings(userId: Int, date: String) async -> [Meeting] {
         do {
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "yyyy-MM-dd"
             let today = dateFormatter.date(from: date) ?? Date()
             
-            // Fetch ALL meetings without complex filters first
-            let allUrl = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?select=*&order=date.desc")!
+            // Fetch meetings where user is creator OR is in attendees
+            // Using OR filter: user_id=eq.{userId} or attendee_ids=cs.{[userId]}
+            let allUrl = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?or=(user_id.eq.\(userId),attendee_ids.cs.%7B\(userId)%7D)&select=*&order=date.desc")!
             
             var request = URLRequest(url: allUrl)
             request.httpMethod = "GET"
@@ -349,18 +350,26 @@ class TaskManager: ObservableObject {
             
             do {
                 let allMeetings = try decoder.decode([Meeting].self, from: data)
-                print("Successfully decoded \(allMeetings.count) meetings")
+                print("Successfully decoded \(allMeetings.count) meetings for user \(userId)")
                 
-                // Filter by date range in code
+                // Filter by date range AND ensure user access (double-check in code)
                 let monthAgo = Calendar.current.date(byAdding: .day, value: -30, to: today)!
                 let futureDate = Calendar.current.date(byAdding: .day, value: 90, to: today)!
                 
                 let filtered = allMeetings.filter { meeting in
-                    guard let meetingDate = dateFormatter.date(from: meeting.date) else { return true }
-                    return meetingDate >= monthAgo && meetingDate <= futureDate
+                    // Check date range
+                    guard let meetingDate = dateFormatter.date(from: meeting.date) else { return false }
+                    let inDateRange = meetingDate >= monthAgo && meetingDate <= futureDate
+                    
+                    // Check user access: user created it OR user is in attendees
+                    let isCreator = meeting.userId == userId
+                    let isAttendee = meeting.attendeeIds?.contains(userId) ?? false
+                    let hasAccess = isCreator || isAttendee
+                    
+                    return inDateRange && hasAccess
                 }
                 
-                print("After date filter: \(filtered.count) meetings")
+                print("After filtering: \(filtered.count) meetings accessible to user \(userId)")
                 return filtered
             } catch let decodingError {
                 print("Meeting decoding error: \(decodingError)")
@@ -405,15 +414,24 @@ class TaskManager: ObservableObject {
                     
                     print("Manually parsed \(manualMeetings.count) meetings")
                     
-                    // Filter by date range
+                    // Filter by date range AND user access
                     let monthAgo = Calendar.current.date(byAdding: .day, value: -30, to: today)!
                     let futureDate = Calendar.current.date(byAdding: .day, value: 90, to: today)!
                     
                     let filtered = manualMeetings.filter { meeting in
-                        guard let meetingDate = dateFormatter.date(from: meeting.date) else { return true }
-                        return meetingDate >= monthAgo && meetingDate <= futureDate
+                        // Check date range
+                        guard let meetingDate = dateFormatter.date(from: meeting.date) else { return false }
+                        let inDateRange = meetingDate >= monthAgo && meetingDate <= futureDate
+                        
+                        // Check user access: user created it OR user is in attendees
+                        let isCreator = meeting.userId == userId
+                        let isAttendee = meeting.attendeeIds?.contains(userId) ?? false
+                        let hasAccess = isCreator || isAttendee
+                        
+                        return inDateRange && hasAccess
                     }
                     
+                    print("After filtering: \(filtered.count) meetings accessible to user \(userId)")
                     return filtered
                 }
                 return []
