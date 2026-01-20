@@ -4967,7 +4967,7 @@ class FloatingNotificationManager {
         // Create a floating panel (like system notifications)
         let panel = NSPanel(
             contentRect: NSRect(x: startX, y: windowY, width: windowWidth, height: windowHeight),
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.borderless, .nonactivatingPanel, .utilityWindow],
             backing: .buffered,
             defer: false
         )
@@ -4975,21 +4975,27 @@ class FloatingNotificationManager {
         panel.contentView = hostingView
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.level = .popUpMenu // High level that appears above most windows
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.level = .floating // Use floating level for better interaction
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.hasShadow = true
         panel.isMovableByWindowBackground = false  // Disable so clicks work
-        panel.becomesKeyOnlyIfNeeded = true
+        panel.becomesKeyOnlyIfNeeded = false  // Allow becoming key for button clicks
         panel.hidesOnDeactivate = false
         panel.alphaValue = 0
         panel.isFloatingPanel = true
         panel.acceptsMouseMovedEvents = true
+        panel.worksWhenModal = true  // Work even when modal dialogs are open
         
         // Store reference
         self.notificationPanel = panel
         
         // Show panel (starts off-screen)
         panel.orderFrontRegardless()
+        
+        // Make panel key if it has action buttons so they can be clicked
+        if hasActions {
+            panel.makeKey()
+        }
         
         // Smooth slide-in animation from right
         NSAnimationContext.runAnimationGroup { context in
