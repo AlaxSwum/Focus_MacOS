@@ -377,11 +377,15 @@ class TaskManager: ObservableObject {
                     guard let meetingDate = dateFormatter.date(from: meeting.date) else { return false }
                     let inDateRange = meetingDate >= monthAgo && meetingDate <= futureDate
                     
-                    // Check user access: user created it OR user is in attendees OR no owner set (legacy)
+                    // Check user access: user created it OR user is in attendees
+                    // (Same logic as website - no fallback for legacy meetings)
                     let isCreator = meeting.userId == userId
                     let isAttendee = meeting.attendeeIds?.contains(userId) ?? false
-                    let noOwner = meeting.userId == nil  // Legacy meetings with no owner
-                    let hasAccess = isCreator || isAttendee || noOwner
+                    let hasAccess = isCreator || isAttendee
+                    
+                    if hasAccess {
+                        print("Meeting '\(meeting.title)' - isCreator: \(isCreator), isAttendee: \(isAttendee)")
+                    }
                     
                     return inDateRange && hasAccess
                 }
@@ -440,11 +444,11 @@ class TaskManager: ObservableObject {
                         guard let meetingDate = dateFormatter.date(from: meeting.date) else { return false }
                         let inDateRange = meetingDate >= monthAgo && meetingDate <= futureDate
                         
-                        // Check user access: user created it OR user is in attendees OR no owner set
+                        // Check user access: user created it OR user is in attendees
+                        // (Same logic as website - no fallback for legacy meetings)
                         let isCreator = meeting.userId == userId
                         let isAttendee = meeting.attendeeIds?.contains(userId) ?? false
-                        let noOwner = meeting.userId == nil
-                        let hasAccess = isCreator || isAttendee || noOwner
+                        let hasAccess = isCreator || isAttendee
                         
                         return inDateRange && hasAccess
                     }
