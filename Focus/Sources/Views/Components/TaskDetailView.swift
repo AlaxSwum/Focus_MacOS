@@ -298,6 +298,7 @@ struct TaskDetailView: View {
             originalId: "1",
             originalType: "meeting",
             notes: nil,
+            isRecurring: false,
             startHour: 14,
             startMinute: 30,
             endHour: 15,

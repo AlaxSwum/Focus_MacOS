@@ -2753,6 +2753,14 @@ struct TaskPopupView: View {
     @Environment(\.dismiss) var dismiss
     @State private var isDeleting = false
     @State private var showDeleteConfirm = false
+    @State private var showRecurringDeleteOptions = false
+    @State private var deleteMode: DeleteMode = .thisOne
+    
+    enum DeleteMode {
+        case thisOne
+        case allFuture
+        case all
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -2860,7 +2868,11 @@ struct TaskPopupView: View {
                 
                 // Delete button
                 Button {
-                    showDeleteConfirm = true
+                    if task.isRecurring {
+                        showRecurringDeleteOptions = true
+                    } else {
+                        showDeleteConfirm = true
+                    }
                 } label: {
                     if isDeleting {
                         ProgressView()
@@ -2892,17 +2904,31 @@ struct TaskPopupView: View {
         .alert("Delete Task", isPresented: $showDeleteConfirm) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
-                deleteTask()
+                deleteTask(mode: .all)
             }
         } message: {
             Text("Are you sure you want to delete '\(task.title)'? This cannot be undone.")
         }
+        .confirmationDialog("Delete Recurring Task", isPresented: $showRecurringDeleteOptions, titleVisibility: .visible) {
+            Button("Delete This Event Only") {
+                deleteTask(mode: .thisOne)
+            }
+            Button("Delete All Future Events", role: .destructive) {
+                deleteTask(mode: .allFuture)
+            }
+            Button("Delete All Events", role: .destructive) {
+                deleteTask(mode: .all)
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("'\(task.title)' is a recurring event. What would you like to delete?")
+        }
     }
     
-    private func deleteTask() {
+    private func deleteTask(mode: DeleteMode) {
         isDeleting = true
         Task {
-            await performDelete()
+            await performDelete(mode: mode)
             if let userId = authManager.currentUser?.id {
                 await taskManager.fetchTasks(for: userId)
             }
@@ -2911,7 +2937,7 @@ struct TaskPopupView: View {
         }
     }
     
-    private func performDelete() async {
+    private func performDelete(mode: DeleteMode) async {
         let supabaseURL = "https://bayyefskgflbyyuwrlgm.supabase.co"
         let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJheXllZnNrZ2ZsYnl5dXdybGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAyNTg0MzAsImV4cCI6MjA2NTgzNDQzMH0.eTr2bOWOO7N7hzRR45qapeQ6V-u2bgV5BbQygZZgGGM"
         
@@ -2926,17 +2952,127 @@ struct TaskPopupView: View {
                 // It's a recurring block with date suffix, take only the first part
                 actualId = String(parts[0])
             }
-            // Also handle if it's already just a number
-            print("DEBUG: Original ID: \(task.originalId), Actual ID: \(actualId)")
+            print("DEBUG: Original ID: \(task.originalId), Actual ID: \(actualId), Mode: \(mode)")
         }
         
-        let table = task.originalType == "meeting" ? "projects_meeting" : "time_blocks"
-        guard let url = URL(string: "\(supabaseURL)/rest/v1/\(table)?id=eq.\(actualId)") else {
+        // Determine table
+        var table = "time_blocks"
+        if task.originalType == "meeting" {
+            table = "projects_meeting"
+        } else if task.originalType == "todo" {
+            table = "personal_todos"
+        }
+        
+        switch mode {
+        case .thisOne:
+            // For "this one only" - add exception date to the recurring block
+            if task.isRecurring {
+                await addExceptionDate(supabaseURL: supabaseURL, supabaseKey: supabaseKey, table: table, id: actualId)
+            } else {
+                await deleteFromDatabase(supabaseURL: supabaseURL, supabaseKey: supabaseKey, table: table, id: actualId)
+            }
+            
+        case .allFuture:
+            // For "all future" - update the recurring end date to today
+            if task.isRecurring {
+                await updateRecurringEndDate(supabaseURL: supabaseURL, supabaseKey: supabaseKey, table: table, id: actualId)
+            } else {
+                await deleteFromDatabase(supabaseURL: supabaseURL, supabaseKey: supabaseKey, table: table, id: actualId)
+            }
+            
+        case .all:
+            // Delete the entire recurring series
+            await deleteFromDatabase(supabaseURL: supabaseURL, supabaseKey: supabaseKey, table: table, id: actualId)
+        }
+    }
+    
+    private func addExceptionDate(supabaseURL: String, supabaseKey: String, table: String, id: String) async {
+        // Get today's date in format yyyy-MM-dd
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let todayStr = dateFormatter.string(from: task.date)
+        
+        // First, get current exception dates
+        guard let getUrl = URL(string: "\(supabaseURL)/rest/v1/\(table)?id=eq.\(id)&select=exception_dates") else { return }
+        
+        var getRequest = URLRequest(url: getUrl)
+        getRequest.httpMethod = "GET"
+        getRequest.setValue(supabaseKey, forHTTPHeaderField: "apikey")
+        getRequest.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(for: getRequest)
+            var exceptionDates: [String] = []
+            
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+               let first = json.first,
+               let existing = first["exception_dates"] as? [String] {
+                exceptionDates = existing
+            }
+            
+            // Add today's date to exceptions
+            if !exceptionDates.contains(todayStr) {
+                exceptionDates.append(todayStr)
+            }
+            
+            // Update the record
+            guard let updateUrl = URL(string: "\(supabaseURL)/rest/v1/\(table)?id=eq.\(id)") else { return }
+            
+            var updateRequest = URLRequest(url: updateUrl)
+            updateRequest.httpMethod = "PATCH"
+            updateRequest.setValue(supabaseKey, forHTTPHeaderField: "apikey")
+            updateRequest.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
+            updateRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            let body: [String: Any] = ["exception_dates": exceptionDates]
+            updateRequest.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            
+            let (_, response) = try await URLSession.shared.data(for: updateRequest)
+            if let httpResponse = response as? HTTPURLResponse {
+                print("DEBUG: Add exception date response: \(httpResponse.statusCode)")
+            }
+        } catch {
+            print("DEBUG: Failed to add exception date: \(error)")
+            // Fallback: just delete the whole thing
+            await deleteFromDatabase(supabaseURL: supabaseURL, supabaseKey: supabaseKey, table: table, id: id)
+        }
+    }
+    
+    private func updateRecurringEndDate(supabaseURL: String, supabaseKey: String, table: String, id: String) async {
+        // Update the recurring_end_date to yesterday
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: task.date) ?? task.date
+        let endDateStr = dateFormatter.string(from: yesterday)
+        
+        guard let url = URL(string: "\(supabaseURL)/rest/v1/\(table)?id=eq.\(id)") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue(supabaseKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: Any] = ["recurring_end_date": endDateStr]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse {
+                print("DEBUG: Update recurring end date response: \(httpResponse.statusCode)")
+            }
+        } catch {
+            print("DEBUG: Failed to update recurring end date: \(error)")
+        }
+    }
+    
+    private func deleteFromDatabase(supabaseURL: String, supabaseKey: String, table: String, id: String) async {
+        guard let url = URL(string: "\(supabaseURL)/rest/v1/\(table)?id=eq.\(id)") else {
             print("DEBUG: Failed to create URL for delete")
             return
         }
         
-        print("DEBUG: Deleting from table: \(table), ID: \(actualId)")
+        print("DEBUG: Deleting from table: \(table), ID: \(id)")
         print("DEBUG: URL: \(url.absoluteString)")
         
         var request = URLRequest(url: url)

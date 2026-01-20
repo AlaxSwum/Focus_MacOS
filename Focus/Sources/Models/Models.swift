@@ -350,6 +350,7 @@ struct TaskItem: Identifiable, Hashable, Equatable {
     let originalId: String
     let originalType: String
     let notes: String?
+    let isRecurring: Bool  // Whether this is a recurring task
     
     // Raw hour/minute for positioning (avoids timezone issues)
     let startHour: Int
