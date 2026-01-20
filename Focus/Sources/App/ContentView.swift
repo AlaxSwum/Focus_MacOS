@@ -6448,34 +6448,51 @@ struct FullJournalView: View {
     @StateObject private var journalManager = JournalManager.shared
     @StateObject private var ruleManager = RuleManager.shared
     
-    @State private var viewMode: Int = 0  // 0 = Normal, 1 = Calendar
+    @State private var viewMode: Int = 0  // 0 = Entries, 1 = Calendar
     @State private var selectedDate = Date()
-    @State private var currentEntry: JournalEntry?
-    @State private var showEditor = false
+    @State private var selectedEntry: JournalEntry?
+    @State private var showingEditor = false
     @State private var currentMonth = Date()
+    @State private var hoveredEntryId: String? = nil
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            journalHeader
-            
-            // View mode tabs
-            viewModeTabs
-            
-            // Content
-            if viewMode == 0 {
-                normalView
-            } else {
-                calendarView
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                // Left Sidebar - Navigation & Stats
+                sidebarSection
+                    .frame(width: 300)
+                
+                // Center - Entries List or Calendar
+                mainContentSection
+                    .frame(maxWidth: .infinity)
+                
+                // Right - Entry Preview/Quick View
+                if let entry = selectedEntry {
+                    previewSection(entry)
+                        .frame(width: 380)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
         }
-        .background(Color(nsColor: NSColor.windowBackgroundColor))
-        .sheet(isPresented: $showEditor) {
-            if let entry = currentEntry {
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(nsColor: NSColor.windowBackgroundColor),
+                    Color(nsColor: NSColor.windowBackgroundColor).opacity(0.95)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .sheet(isPresented: $showingEditor) {
+            if let entry = selectedEntry {
                 JournalEditorView(
                     entry: Binding(
                         get: { entry },
-                        set: { currentEntry = $0 }
+                        set: { newEntry in
+                            selectedEntry = newEntry
+                            journalManager.updateEntry(newEntry)
+                        }
                     ),
                     journalManager: journalManager,
                     taskManager: taskManager,
@@ -6483,238 +6500,373 @@ struct FullJournalView: View {
                 )
             }
         }
-        .onAppear {
-            loadTodayEntry()
-        }
     }
     
-    private func loadTodayEntry() {
-        if let userId = authManager.currentUser?.id {
-            currentEntry = journalManager.getTodayEntry(userId: userId)
-        }
-    }
-    
-    // MARK: - Header
-    private var journalHeader: some View {
-        HStack(spacing: 16) {
-            // Title
-            HStack(spacing: 12) {
-                Image(systemName: "book.pages.fill")
-                    .font(.system(size: 28))
-                    .foregroundColor(.purple)
-                Text("Daily Journal")
-                    .font(.system(size: 28, weight: .bold))
+    // MARK: - Left Sidebar
+    private var sidebarSection: some View {
+        VStack(spacing: 0) {
+            // Header
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(
+                                LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            )
+                            .frame(width: 44, height: 44)
+                        
+                        Image(systemName: "book.pages.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.white)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Journal")
+                            .font(.system(size: 20, weight: .bold))
+                        Text("Daily reflection")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            
+            Divider()
+                .padding(.horizontal, 20)
+            
+            // View Mode Tabs
+            VStack(spacing: 8) {
+                Text("VIEW")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 20)
+                
+                VStack(spacing: 4) {
+                    sidebarViewButton("Entries", icon: "list.bullet.rectangle", isSelected: viewMode == 0) {
+                        withAnimation { viewMode = 0 }
+                    }
+                    sidebarViewButton("Calendar", icon: "calendar", isSelected: viewMode == 1) {
+                        withAnimation { viewMode = 1 }
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
+            
+            Divider()
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+            
+            // Stats
+            VStack(spacing: 16) {
+                Text("STATISTICS")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 20)
+                
+                // Streak
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(LinearGradient(colors: [.orange, .red], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.white)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(journalManager.stats.currentStreak) Days")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.orange)
+                        Text("Current Streak")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                
+                // Stats Grid
+                HStack(spacing: 12) {
+                    statMiniCard("\(journalManager.stats.totalEntries)", label: "Entries", icon: "doc.text.fill", color: .blue)
+                    statMiniCard("\(journalManager.stats.totalPoints)", label: "Points", icon: "star.fill", color: .yellow)
+                }
+                .padding(.horizontal, 24)
             }
             
             Spacer()
             
-            // Stats
-            HStack(spacing: 16) {
-                // Streak
-                HStack(spacing: 6) {
-                    Image(systemName: "flame.fill")
-                        .foregroundColor(.orange)
-                    Text("\(journalManager.stats.currentStreak) day streak")
-                        .font(.system(size: 14, weight: .medium))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.orange.opacity(0.15))
-                .clipShape(Capsule())
-                
-                // Total entries
-                HStack(spacing: 6) {
-                    Image(systemName: "doc.text.fill")
-                        .foregroundColor(.blue)
-                    Text("\(journalManager.stats.totalEntries) entries")
-                        .font(.system(size: 14, weight: .medium))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.blue.opacity(0.15))
-                .clipShape(Capsule())
-                
-                // Points
-                HStack(spacing: 6) {
-                    Image(systemName: "star.fill")
-                        .foregroundColor(.yellow)
-                    Text("\(journalManager.stats.totalPoints) pts")
-                        .font(.system(size: 14, weight: .medium))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.yellow.opacity(0.15))
-                .clipShape(Capsule())
-            }
-            
-            // Write Today button
+            // Write Today Button
             Button {
                 if let userId = authManager.currentUser?.id {
-                    currentEntry = journalManager.getTodayEntry(userId: userId)
-                    showEditor = true
+                    selectedEntry = journalManager.getTodayEntry(userId: userId)
+                    showingEditor = true
                 }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 10) {
                     Image(systemName: "pencil.line")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 16, weight: .semibold))
                     Text("Write Today")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                 }
                 .foregroundColor(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing))
-                .clipShape(Capsule())
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(color: .purple.opacity(0.3), radius: 8, y: 4)
             }
             .buttonStyle(.plain)
+            .padding(24)
         }
-        .padding(24)
         .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.5))
     }
     
-    // MARK: - View Mode Tabs
-    private var viewModeTabs: some View {
-        HStack(spacing: 8) {
-            Button {
-                withAnimation { viewMode = 0 }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "list.bullet")
-                    Text("Entries")
+    private func sidebarViewButton(_ title: String, icon: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundColor(isSelected ? .purple : .secondary)
+                    .frame(width: 24)
+                
+                Text(title)
+                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? .primary : .secondary)
+                
+                Spacer()
+                
+                if isSelected {
+                    Circle()
+                        .fill(Color.purple)
+                        .frame(width: 8, height: 8)
                 }
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(viewMode == 0 ? .white : .secondary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(viewMode == 0 ? Color.purple : Color.clear)
-                .clipShape(Capsule())
             }
-            .buttonStyle(.plain)
-            
-            Button {
-                withAnimation { viewMode = 1 }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "calendar")
-                    Text("Calendar")
-                }
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(viewMode == 1 ? .white : .secondary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(viewMode == 1 ? Color.purple : Color.clear)
-                .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            
-            Spacer()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? Color.purple.opacity(0.1) : Color.clear)
+            )
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
-        .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.3))
+        .buttonStyle(.plain)
     }
     
-    // MARK: - Normal View (List)
-    private var normalView: some View {
-        ScrollView {
-            LazyVStack(spacing: 16) {
-                // Today's entry card (prominent)
-                if let todayEntry = journalManager.getEntryForDate(Date()) {
-                    todayEntryCard(todayEntry)
-                } else {
-                    emptyTodayCard
+    private func statMiniCard(_ value: String, label: String, icon: String, color: Color) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundColor(color)
+            Text(value)
+                .font(.system(size: 18, weight: .bold))
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(nsColor: NSColor.windowBackgroundColor))
+        )
+    }
+    
+    // MARK: - Main Content
+    private var mainContentSection: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(viewMode == 0 ? "All Entries" : "Calendar View")
+                        .font(.system(size: 28, weight: .bold))
+                    
+                    Text(viewMode == 0 ? "\(journalManager.entries.count) journal entries" : currentMonth.formatted(.dateTime.month(.wide).year()))
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
                 }
                 
-                // Past entries
+                Spacer()
+                
+                if viewMode == 1 {
+                    // Month navigation
+                    HStack(spacing: 16) {
+                        Button {
+                            currentMonth = Calendar.current.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.secondary)
+                                .padding(10)
+                                .background(Circle().fill(Color.secondary.opacity(0.1)))
+                        }
+                        .buttonStyle(.plain)
+                        
+                        Button {
+                            currentMonth = Calendar.current.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
+                        } label: {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.secondary)
+                                .padding(10)
+                                .background(Circle().fill(Color.secondary.opacity(0.1)))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, 32)
+            .padding(.vertical, 24)
+            .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.3))
+            
+            // Content
+            if viewMode == 0 {
+                entriesListView
+            } else {
+                calendarGridView
+            }
+        }
+    }
+    
+    // MARK: - Entries List View
+    private var entriesListView: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                // Today's Entry (Featured)
+                if let todayEntry = journalManager.getEntryForDate(Date()) {
+                    todayEntryCard(todayEntry)
+                        .padding(.bottom, 8)
+                } else {
+                    emptyTodayCard
+                        .padding(.bottom, 8)
+                }
+                
+                // Past Entries
                 let pastEntries = journalManager.entries
                     .filter { !Calendar.current.isDateInToday($0.date) }
                     .sorted { $0.date > $1.date }
                 
                 if !pastEntries.isEmpty {
-                    Text("Past Entries")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 16)
+                    HStack {
+                        Text("Previous Entries")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .padding(.top, 8)
                     
                     ForEach(pastEntries) { entry in
-                        entryCard(entry)
+                        entryRowCard(entry)
                     }
                 }
             }
-            .padding(24)
+            .padding(32)
         }
     }
     
     private func todayEntryCard(_ entry: JournalEntry) -> some View {
         Button {
-            currentEntry = entry
-            showEditor = true
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                selectedEntry = entry
+            }
         } label: {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Today")
-                            .font(.system(size: 24, weight: .bold))
-                        Text(entry.date.formatted(date: .complete, time: .omitted))
-                            .font(.system(size: 14))
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    // Completion circle
-                    ZStack {
-                        Circle()
-                            .stroke(Color.purple.opacity(0.2), lineWidth: 6)
-                            .frame(width: 60, height: 60)
-                        Circle()
-                            .trim(from: 0, to: entry.completionPercentage / 100)
-                            .stroke(Color.purple, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                            .frame(width: 60, height: 60)
-                            .rotationEffect(.degrees(-90))
-                        Text("\(Int(entry.completionPercentage))%")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.purple)
-                    }
+            HStack(spacing: 24) {
+                // Left - Date
+                VStack(spacing: 4) {
+                    Text("TODAY")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.purple)
+                    Text(entry.date.formatted(.dateTime.day()))
+                        .font(.system(size: 36, weight: .bold))
+                    Text(entry.date.formatted(.dateTime.month(.abbreviated)))
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
                 }
+                .frame(width: 80)
                 
-                // Preview of content
-                if !entry.topOutcomes.filter({ !$0.isEmpty }).isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Top Outcomes")
-                            .font(.system(size: 12, weight: .semibold))
+                Divider()
+                    .frame(height: 80)
+                
+                // Center - Content Preview
+                VStack(alignment: .leading, spacing: 10) {
+                    if !entry.biggestWin.isEmpty {
+                        Text(entry.biggestWin)
+                            .font(.system(size: 17, weight: .semibold))
+                            .lineLimit(2)
+                    } else {
+                        Text("Continue your journal entry...")
+                            .font(.system(size: 17, weight: .medium))
                             .foregroundColor(.secondary)
-                        ForEach(entry.topOutcomes.filter { !$0.isEmpty }, id: \.self) { outcome in
-                            HStack(spacing: 8) {
-                                Image(systemName: "target")
+                    }
+                    
+                    HStack(spacing: 12) {
+                        if !entry.dominantEmotion.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "heart.fill")
+                                    .font(.system(size: 10))
+                                Text(entry.dominantEmotion)
                                     .font(.system(size: 12))
-                                    .foregroundColor(.purple)
-                                Text(outcome)
-                                    .font(.system(size: 14))
                             }
+                            .foregroundColor(.pink)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.pink.opacity(0.1))
+                            .clipShape(Capsule())
                         }
+                        
+                        HStack(spacing: 4) {
+                            Image(systemName: "circle.lefthalf.filled")
+                                .font(.system(size: 10))
+                            Text("\(Int(entry.completionPercentage))% complete")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundColor(.secondary)
                     }
                 }
                 
-                HStack {
-                    Text("Click to continue writing...")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                Spacer()
+                
+                // Right - Progress Ring
+                ZStack {
+                    Circle()
+                        .stroke(Color.purple.opacity(0.15), lineWidth: 8)
+                        .frame(width: 70, height: 70)
+                    
+                    Circle()
+                        .trim(from: 0, to: entry.completionPercentage / 100)
+                        .stroke(
+                            LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                        )
+                        .frame(width: 70, height: 70)
+                        .rotationEffect(.degrees(-90))
+                    
+                    Text("\(Int(entry.completionPercentage))%")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.purple)
                 }
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
             }
             .padding(24)
             .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(LinearGradient(colors: [Color.purple.opacity(0.1), Color.pink.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(
+                        LinearGradient(colors: [Color.purple.opacity(0.08), Color.pink.opacity(0.04)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(Color.purple.opacity(0.3), lineWidth: 2)
+                RoundedRectangle(cornerRadius: 20)
+                    .strokeBorder(Color.purple.opacity(0.25), lineWidth: 1.5)
             )
         }
         .buttonStyle(.plain)
@@ -6723,35 +6875,45 @@ struct FullJournalView: View {
     private var emptyTodayCard: some View {
         Button {
             if let userId = authManager.currentUser?.id {
-                currentEntry = journalManager.getTodayEntry(userId: userId)
-                showEditor = true
+                selectedEntry = journalManager.getTodayEntry(userId: userId)
+                showingEditor = true
             }
         } label: {
-            VStack(spacing: 20) {
-                Image(systemName: "pencil.and.outline")
-                    .font(.system(size: 48))
-                    .foregroundColor(.purple.opacity(0.5))
+            HStack(spacing: 24) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: [.purple.opacity(0.15), .pink.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 80, height: 80)
+                    
+                    Image(systemName: "pencil.and.outline")
+                        .font(.system(size: 32))
+                        .foregroundColor(.purple)
+                }
                 
-                Text("Start Today's Journal")
-                    .font(.system(size: 20, weight: .semibold))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Start Today's Journal")
+                        .font(.system(size: 20, weight: .bold))
+                    
+                    Text("Reflect on your day, track your progress, and grow with every entry")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
                 
-                Text("Reflect on your day, track your progress,\nand grow with every entry")
-                    .font(.system(size: 14))
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
+                Spacer()
                 
-                Text("Begin Writing")
+                Text("Begin")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
                     .background(LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing))
                     .clipShape(Capsule())
             }
-            .padding(40)
-            .frame(maxWidth: .infinity)
+            .padding(24)
             .background(
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: 20)
                     .fill(Color(nsColor: NSColor.controlBackgroundColor))
                     .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
             )
@@ -6759,18 +6921,22 @@ struct FullJournalView: View {
         .buttonStyle(.plain)
     }
     
-    private func entryCard(_ entry: JournalEntry) -> some View {
-        Button {
-            currentEntry = entry
-            showEditor = true
+    private func entryRowCard(_ entry: JournalEntry) -> some View {
+        let isHovered = hoveredEntryId == entry.id
+        let isSelected = selectedEntry?.id == entry.id
+        
+        return Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                selectedEntry = entry
+            }
         } label: {
-            HStack(spacing: 16) {
+            HStack(spacing: 20) {
                 // Date
-                VStack(spacing: 4) {
+                VStack(spacing: 2) {
                     Text(entry.date.formatted(.dateTime.day()))
-                        .font(.system(size: 24, weight: .bold))
+                        .font(.system(size: 22, weight: .bold))
                     Text(entry.date.formatted(.dateTime.month(.abbreviated)))
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 }
                 .frame(width: 50)
@@ -6778,24 +6944,26 @@ struct FullJournalView: View {
                 Divider()
                     .frame(height: 40)
                 
-                // Content preview
-                VStack(alignment: .leading, spacing: 4) {
+                // Content
+                VStack(alignment: .leading, spacing: 6) {
                     Text(entry.biggestWin.isEmpty ? "Journal Entry" : entry.biggestWin)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.system(size: 15, weight: .medium))
                         .lineLimit(1)
                     
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         if !entry.dominantEmotion.isEmpty {
                             Text(entry.dominantEmotion)
-                                .font(.system(size: 12))
+                                .font(.system(size: 11))
+                                .foregroundColor(.pink)
                                 .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Color.blue.opacity(0.1))
+                                .padding(.vertical, 3)
+                                .background(Color.pink.opacity(0.1))
                                 .clipShape(Capsule())
                         }
-                        Text("\(Int(entry.completionPercentage))% complete")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
+                        
+                        Text("\(Int(entry.completionPercentage))%")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(entry.completionPercentage >= 50 ? .green : .orange)
                     }
                 }
                 
@@ -6803,96 +6971,59 @@ struct FullJournalView: View {
                 
                 // Completion indicator
                 Circle()
-                    .fill(entry.completionPercentage >= 50 ? Color.green : Color.orange)
-                    .frame(width: 12, height: 12)
+                    .fill(entry.completionPercentage >= 80 ? Color.green : entry.completionPercentage >= 50 ? Color.orange : Color.secondary.opacity(0.3))
+                    .frame(width: 10, height: 10)
                 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.secondary.opacity(0.5))
             }
-            .padding(16)
+            .padding(18)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(nsColor: NSColor.controlBackgroundColor))
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(isSelected ? Color.purple.opacity(0.08) : Color(nsColor: NSColor.controlBackgroundColor))
+                    .shadow(color: isHovered ? .purple.opacity(0.1) : .black.opacity(0.03), radius: isHovered ? 8 : 4, y: 2)
             )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(isSelected ? Color.purple.opacity(0.3) : Color.clear, lineWidth: 1.5)
+            )
+            .scaleEffect(isHovered ? 1.01 : 1.0)
         }
         .buttonStyle(.plain)
+        .onHover { h in
+            withAnimation(.easeOut(duration: 0.15)) {
+                hoveredEntryId = h ? entry.id : nil
+            }
+        }
     }
     
-    // MARK: - Calendar View
-    private var calendarView: some View {
-        HStack(spacing: 0) {
-            // Calendar
-            VStack(spacing: 16) {
-                // Month navigation
-                HStack {
-                    Button {
-                        currentMonth = Calendar.current.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 14, weight: .semibold))
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Spacer()
-                    
-                    Text(currentMonth.formatted(.dateTime.month(.wide).year()))
-                        .font(.system(size: 18, weight: .semibold))
-                    
-                    Spacer()
-                    
-                    Button {
-                        currentMonth = Calendar.current.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 14, weight: .semibold))
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal)
-                
-                // Weekday headers
-                let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-                HStack(spacing: 0) {
-                    ForEach(weekdays, id: \.self) { day in
-                        Text(day)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                
-                // Calendar grid
-                let days = calendarDays()
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 8) {
-                    ForEach(days, id: \.self) { date in
-                        calendarDayCell(date)
-                    }
-                }
-                
-                Spacer()
-            }
-            .padding(24)
-            .frame(width: 400)
-            .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.5))
-            
-            Divider()
-            
-            // Selected day preview
-            VStack(spacing: 16) {
-                Text(selectedDate.formatted(date: .complete, time: .omitted))
-                    .font(.system(size: 20, weight: .bold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                
-                if let entry = journalManager.getEntryForDate(selectedDate) {
-                    entryPreview(entry)
-                } else {
-                    noEntryView
+    // MARK: - Calendar Grid View
+    private var calendarGridView: some View {
+        VStack(spacing: 20) {
+            // Weekday Headers
+            HStack(spacing: 0) {
+                ForEach(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], id: \.self) { day in
+                    Text(day)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity)
                 }
             }
-            .padding(24)
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 32)
+            
+            // Calendar Grid
+            let days = calendarDays()
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 7), spacing: 8) {
+                ForEach(days, id: \.self) { date in
+                    calendarDayCell(date)
+                }
+            }
+            .padding(.horizontal, 32)
+            
+            Spacer()
         }
+        .padding(.top, 20)
     }
     
     private func calendarDays() -> [Date] {
@@ -6902,13 +7033,11 @@ struct FullJournalView: View {
         
         var days: [Date] = []
         
-        // Add padding for first week
         let firstWeekday = calendar.component(.weekday, from: startOfMonth)
         for _ in 1..<firstWeekday {
             days.append(Date.distantPast)
         }
         
-        // Add days of month
         for day in range {
             if let date = calendar.date(byAdding: .day, value: day - 1, to: startOfMonth) {
                 days.append(date)
@@ -6922,141 +7051,192 @@ struct FullJournalView: View {
         let calendar = Calendar.current
         let isValidDate = date != Date.distantPast
         let isToday = calendar.isDateInToday(date)
-        let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
-        let hasEntry = isValidDate && journalManager.hasEntryForDate(date)
-        let completion = journalManager.completionForDate(date)
+        let isSelected = selectedEntry != nil && calendar.isDate(date, inSameDayAs: selectedEntry!.date)
+        let entry = isValidDate ? journalManager.getEntryForDate(date) : nil
+        let hasEntry = entry != nil
         
         return Button {
             if isValidDate {
-                selectedDate = date
-            }
-        } label: {
-            ZStack {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.purple)
-                }
-                
-                VStack(spacing: 4) {
-                    if isValidDate {
-                        Text("\(calendar.component(.day, from: date))")
-                            .font(.system(size: 14, weight: isToday ? .bold : .regular))
-                            .foregroundColor(isSelected ? .white : (isToday ? .purple : .primary))
-                        
-                        if hasEntry {
-                            Circle()
-                                .fill(completion >= 50 ? Color.green : Color.orange)
-                                .frame(width: 6, height: 6)
-                        }
+                if let existingEntry = entry {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        selectedEntry = existingEntry
+                    }
+                } else if let userId = authManager.currentUser?.id, date <= Date() {
+                    let newEntry = journalManager.getOrCreateEntryForDate(date, userId: userId)
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        selectedEntry = newEntry
                     }
                 }
             }
-            .frame(height: 44)
+        } label: {
+            VStack(spacing: 6) {
+                if isValidDate {
+                    Text("\(calendar.component(.day, from: date))")
+                        .font(.system(size: 16, weight: isToday ? .bold : .medium))
+                        .foregroundColor(isSelected ? .white : (isToday ? .purple : .primary))
+                    
+                    if hasEntry {
+                        let completion = entry?.completionPercentage ?? 0
+                        Circle()
+                            .fill(completion >= 80 ? Color.green : completion >= 50 ? Color.orange : Color.purple.opacity(0.5))
+                            .frame(width: 8, height: 8)
+                    } else {
+                        Circle()
+                            .fill(Color.clear)
+                            .frame(width: 8, height: 8)
+                    }
+                }
+            }
+            .frame(height: 60)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? Color.purple : (isToday ? Color.purple.opacity(0.1) : Color.clear))
+            )
         }
         .buttonStyle(.plain)
         .disabled(!isValidDate)
     }
     
-    private func entryPreview(_ entry: JournalEntry) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Completion
-                HStack {
-                    Text("Completion")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    Text("\(Int(entry.completionPercentage))%")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(entry.completionPercentage >= 50 ? .green : .orange)
-                }
-                
-                Divider()
-                
-                // Biggest win
-                if !entry.biggestWin.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Biggest Win")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.secondary)
-                        Text(entry.biggestWin)
-                            .font(.system(size: 14))
-                    }
-                }
-                
-                // Dominant emotion
-                if !entry.dominantEmotion.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Dominant Emotion")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.secondary)
-                        Text(entry.dominantEmotion)
-                            .font(.system(size: 14))
-                    }
-                }
-                
-                // Learning
-                if !entry.oneLearned.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("One Thing Learned")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.secondary)
-                        Text(entry.oneLearned)
-                            .font(.system(size: 14))
-                    }
-                }
+    // MARK: - Right Preview Section
+    private func previewSection(_ entry: JournalEntry) -> some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Entry Preview")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.secondary)
                 
                 Spacer()
                 
-                // Edit button
                 Button {
-                    currentEntry = entry
-                    showEditor = true
+                    withAnimation { selectedEntry = nil }
                 } label: {
-                    Text("View Full Entry")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.purple)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .padding(8)
+                        .background(Circle().fill(Color.secondary.opacity(0.1)))
                 }
                 .buttonStyle(.plain)
             }
+            .padding(24)
+            
+            Divider()
+            
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Date & Completion
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(entry.date.formatted(.dateTime.weekday(.wide)))
+                                .font(.system(size: 14))
+                                .foregroundColor(.secondary)
+                            Text(entry.date.formatted(.dateTime.day().month(.wide).year()))
+                                .font(.system(size: 20, weight: .bold))
+                        }
+                        
+                        Spacer()
+                        
+                        // Completion
+                        ZStack {
+                            Circle()
+                                .stroke(Color.purple.opacity(0.15), lineWidth: 6)
+                                .frame(width: 56, height: 56)
+                            Circle()
+                                .trim(from: 0, to: entry.completionPercentage / 100)
+                                .stroke(Color.purple, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                                .frame(width: 56, height: 56)
+                                .rotationEffect(.degrees(-90))
+                            Text("\(Int(entry.completionPercentage))%")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.purple)
+                        }
+                    }
+                    
+                    Divider()
+                    
+                    // Content Preview
+                    if !entry.biggestWin.isEmpty {
+                        previewField("Biggest Win", value: entry.biggestWin, icon: "trophy.fill", color: .yellow)
+                    }
+                    
+                    if !entry.dominantEmotion.isEmpty {
+                        previewField("Emotion", value: entry.dominantEmotion, icon: "heart.fill", color: .pink)
+                    }
+                    
+                    if !entry.oneLearned.isEmpty {
+                        previewField("Learned", value: entry.oneLearned, icon: "lightbulb.fill", color: .orange)
+                    }
+                    
+                    if !entry.topOutcomes.filter({ !$0.isEmpty }).isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "target")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.purple)
+                                Text("Top Outcomes")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            ForEach(entry.topOutcomes.filter { !$0.isEmpty }, id: \.self) { outcome in
+                                HStack(spacing: 8) {
+                                    Circle()
+                                        .fill(Color.purple)
+                                        .frame(width: 6, height: 6)
+                                    Text(outcome)
+                                        .font(.system(size: 14))
+                                }
+                            }
+                        }
+                    }
+                    
+                    Spacer(minLength: 20)
+                }
+                .padding(24)
+            }
+            
+            Divider()
+            
+            // Edit Button
+            Button {
+                showingEditor = true
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("Edit Entry")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            .padding(24)
         }
+        .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.5))
     }
     
-    private var noEntryView: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            
-            Image(systemName: "doc.text")
-                .font(.system(size: 48))
-                .foregroundColor(.secondary.opacity(0.4))
-            
-            Text("No entry for this day")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.secondary)
-            
-            if Calendar.current.isDate(selectedDate, inSameDayAs: Date()) || selectedDate < Date() {
-                Button {
-                    if let userId = authManager.currentUser?.id {
-                        currentEntry = journalManager.getOrCreateEntryForDate(selectedDate, userId: userId)
-                        showEditor = true
-                    }
-                } label: {
-                    Text("Create Entry")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 10)
-                        .background(Color.purple)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
+    private func previewField(_ title: String, value: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                    .foregroundColor(color)
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
             }
             
-            Spacer()
+            Text(value)
+                .font(.system(size: 14))
+                .lineLimit(3)
         }
     }
 }
