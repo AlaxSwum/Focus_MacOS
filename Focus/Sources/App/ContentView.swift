@@ -3977,7 +3977,7 @@ struct MeetingPopupView: View {
     @State private var hasExistingNotes = false
     @State private var isCheckingNotes = true
     @State private var meetingAttendees: [String] = []
-    @State private var isOwner = false  // Whether current user owns this meeting
+    @State private var isOwner = true  // Default to true so delete works before ownership check completes
     @State private var meetingOwnerId: Int? = nil
     @State private var meetingAttendeeIds: [Int] = []
     
@@ -4330,8 +4330,11 @@ struct MeetingPopupView: View {
     private func checkOwnership() {
         guard let userId = authManager.currentUser?.id else { return }
         
+        // Extract numeric ID from meeting.originalId
+        let meetingId = meeting.originalId.replacingOccurrences(of: "meeting-", with: "")
+        
         Task {
-            guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?id=eq.\(meeting.originalId)&select=user_id,attendee_ids") else { return }
+            guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?id=eq.\(meetingId)&select=user_id,attendee_ids") else { return }
             
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
@@ -4359,11 +4362,24 @@ struct MeetingPopupView: View {
     }
     
     private func performDelete() async {
-        guard let userId = authManager.currentUser?.id else { return }
+        guard let userId = authManager.currentUser?.id else {
+            print("DELETE: No user ID available")
+            return
+        }
+        
+        // Extract numeric ID from meeting.originalId (might be "meeting-123" format)
+        let meetingId = meeting.originalId.replacingOccurrences(of: "meeting-", with: "")
+        print("DELETE: Attempting to delete meeting ID: \(meetingId), isOwner: \(isOwner)")
         
         if isOwner {
             // Owner: Delete the meeting entirely
-            guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?id=eq.\(meeting.originalId)") else { return }
+            let urlString = "\(supabaseURL)/rest/v1/projects_meeting?id=eq.\(meetingId)"
+            print("DELETE URL: \(urlString)")
+            
+            guard let url = URL(string: urlString) else {
+                print("DELETE: Invalid URL")
+                return
+            }
             
             var request = URLRequest(url: url)
             request.httpMethod = "DELETE"
@@ -4371,8 +4387,16 @@ struct MeetingPopupView: View {
             request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
             
             do {
-                _ = try await URLSession.shared.data(for: request)
-                print("Meeting deleted by owner")
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse {
+                    print("DELETE Response status: \(httpResponse.statusCode)")
+                    if httpResponse.statusCode >= 200 && httpResponse.statusCode < 300 {
+                        print("Meeting \(meetingId) deleted successfully by owner")
+                    } else {
+                        let responseStr = String(data: data, encoding: .utf8) ?? "no data"
+                        print("DELETE Error response: \(responseStr)")
+                    }
+                }
             } catch {
                 print("Failed to delete meeting: \(error)")
             }
@@ -4381,7 +4405,7 @@ struct MeetingPopupView: View {
             let newAttendees = meetingAttendeeIds.filter { $0 != userId }
             let updateData: [String: Any] = ["attendee_ids": newAttendees]
             
-            guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?id=eq.\(meeting.originalId)") else { return }
+            guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting?id=eq.\(meetingId)") else { return }
             
             var request = URLRequest(url: url)
             request.httpMethod = "PATCH"
@@ -4391,7 +4415,10 @@ struct MeetingPopupView: View {
             
             do {
                 request.httpBody = try JSONSerialization.data(withJSONObject: updateData)
-                _ = try await URLSession.shared.data(for: request)
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse {
+                    print("LEAVE Response status: \(httpResponse.statusCode)")
+                }
                 print("User \(userId) removed from attendee list")
             } catch {
                 print("Failed to leave meeting: \(error)")
