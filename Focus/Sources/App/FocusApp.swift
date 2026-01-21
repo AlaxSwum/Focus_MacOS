@@ -4799,12 +4799,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
         
         print("Total notifications scheduled: \(scheduledCount)")
-        
-        // Send a test notification after 5 seconds to verify notifications work
-        sendTestNotification()
     }
     
     func sendTestNotification() {
+        // Only used for debugging - disabled in normal operation
+        #if DEBUG
         print("Attempting to send test notification...")
         
         let content = UNMutableNotificationContent()
@@ -4825,6 +4824,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 print("Test notification SCHEDULED - should appear in 2 seconds")
             }
         }
+        #endif
     }
     
     func scheduleNotification(for task: TaskItem, at date: Date) {
@@ -4917,8 +4917,8 @@ class FloatingNotificationManager {
             let currentTotalMinutes = currentHour * 60 + currentMinute
             
             for task in tasks {
-                // Skip completed tasks
-                if task.isCompleted { continue }
+                // Skip completed or skipped tasks
+                if task.isCompleted || task.isSkipped { continue }
                 
                 // Skip already notified tasks
                 let notificationId = "\(task.id)-\(task.startHour)-\(task.startMinute)"
@@ -4927,10 +4927,12 @@ class FloatingNotificationManager {
                 let taskTotalMinutes = task.startHour * 60 + task.startMinute
                 let minutesUntilTask = taskTotalMinutes - currentTotalMinutes
                 
-                // Notify if task is 5 minutes away or less (but not past)
-                if minutesUntilTask >= 0 && minutesUntilTask <= 5 {
+                // Only notify at exactly 5 minutes before (within a 1-minute window: 4-5 minutes)
+                // This prevents multiple notifications and only fires once
+                if minutesUntilTask >= 4 && minutesUntilTask <= 5 {
                     self.notifiedTaskIds.insert(notificationId)
-                    self.showTaskReminder(task: task, minutesBefore: minutesUntilTask)
+                    self.showTaskReminder(task: task, minutesBefore: 5)
+                    print("DEBUG: Showing reminder for '\(task.title)' - \(minutesUntilTask) minutes until start")
                 }
             }
             
