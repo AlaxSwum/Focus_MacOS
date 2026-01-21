@@ -44,7 +44,7 @@ struct AddEditTaskView: View {
     @State private var selectedCategories: [TaskCategory] = []
     @State private var selectedDate: Date = Date()
     @State private var startTime: Date = Date()
-    @State private var endTime: Date = Date().addingTimeInterval(1800)
+    @State private var endTime: Date = Date().addingTimeInterval(3600)  // Default 1 hour
     @State private var meetingLink: String = ""
     @State private var notificationMinutes: Int = 10
     @State private var isRecurring: Bool = false
@@ -97,7 +97,7 @@ struct AddEditTaskView: View {
             _startTime = State(initialValue: start)
             _endTime = State(initialValue: end)
         } else {
-            // Creating new without selection - use current time rounded to 15 min
+            // Creating new without selection - use current time rounded to 15 min, default 1 hour duration
             _selectedDate = State(initialValue: date)
             let calendar = Calendar.current
             let hour = calendar.component(.hour, from: Date())
@@ -105,7 +105,7 @@ struct AddEditTaskView: View {
             let roundedMinute = (minute / 15) * 15
             if let start = calendar.date(bySettingHour: hour, minute: roundedMinute, second: 0, of: date) {
                 _startTime = State(initialValue: start)
-                _endTime = State(initialValue: start.addingTimeInterval(1800))
+                _endTime = State(initialValue: start.addingTimeInterval(3600))  // Default 1 hour
             }
         }
     }
@@ -239,85 +239,82 @@ struct AddEditTaskView: View {
                             }
                         }
                         
-                        // Time pickers - Improved card design
-                        HStack(spacing: 0) {
-                            // Start Time Card
-                            VStack(spacing: 8) {
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(Color.green)
-                                        .frame(width: 6, height: 6)
-                                    Text("START")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundColor(.secondary)
-                                        .tracking(1)
+                        // Quick Duration Buttons
+                        HStack(spacing: 8) {
+                            ForEach([30, 60, 90, 120], id: \.self) { minutes in
+                                Button {
+                                    endTime = startTime.addingTimeInterval(Double(minutes * 60))
+                                } label: {
+                                    let isSelected = Int(endTime.timeIntervalSince(startTime) / 60) == minutes
+                                    Text(minutes >= 60 ? "\(minutes/60)h\(minutes % 60 > 0 ? " \(minutes % 60)m" : "")" : "\(minutes)m")
+                                        .font(.system(size: 12, weight: isSelected ? .bold : .medium))
+                                        .foregroundColor(isSelected ? .white : .primary)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .fill(isSelected ? Color.accentColor : Color(nsColor: NSColor.controlBackgroundColor))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .strokeBorder(isSelected ? Color.clear : Color.gray.opacity(0.3), lineWidth: 1)
+                                        )
                                 }
+                                .buttonStyle(.plain)
+                            }
+                            Spacer()
+                        }
+                        
+                        // Time pickers - Clean simple design
+                        HStack(spacing: 16) {
+                            // Start Time
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Start Time")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.secondary)
                                 
                                 DatePicker("", selection: $startTime, displayedComponents: .hourAndMinute)
                                     .labelsHidden()
-                                    .datePickerStyle(.field)
-                                    .scaleEffect(1.1)
+                                    .datePickerStyle(.stepperField)
+                                    .frame(width: 100)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .padding(.horizontal, 12)
+                            .padding(12)
                             .background(
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: 10)
                                     .fill(Color(nsColor: NSColor.controlBackgroundColor))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .strokeBorder(Color.green.opacity(0.3), lineWidth: 1.5)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .strokeBorder(Color.green.opacity(0.4), lineWidth: 1)
+                                    )
                             )
                             
-                            // Arrow connector
-                            ZStack {
-                                Rectangle()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [Color.green.opacity(0.3), Color.orange.opacity(0.3)],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                    .frame(width: 40, height: 2)
-                                
-                                Image(systemName: "arrow.right.circle.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundStyle(
-                                        LinearGradient(
-                                            colors: [Color.green, Color.orange],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                            }
-                            .padding(.horizontal, 8)
+                            // Arrow
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.secondary)
                             
-                            // End Time Card
-                            VStack(spacing: 8) {
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(Color.orange)
-                                        .frame(width: 6, height: 6)
-                                    Text("END")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundColor(.secondary)
-                                        .tracking(1)
-                                }
+                            // End Time
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("End Time")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.secondary)
                                 
                                 DatePicker("", selection: $endTime, displayedComponents: .hourAndMinute)
                                     .labelsHidden()
-                                    .datePickerStyle(.field)
-                                    .scaleEffect(1.1)
+                                    .datePickerStyle(.stepperField)
+                                    .frame(width: 100)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .padding(.horizontal, 12)
+                            .padding(12)
                             .background(
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: 10)
                                     .fill(Color(nsColor: NSColor.controlBackgroundColor))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .strokeBorder(Color.orange.opacity(0.4), lineWidth: 1)
+                                    )
                             )
+                            
+                            Spacer()
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
                                     .strokeBorder(Color.orange.opacity(0.3), lineWidth: 1.5)

@@ -1368,48 +1368,95 @@ struct FullCalendarView: View {
     }
     
     private var weekDragPreview: some View {
+        let quarterHeight = hourHeight / 4
         let top = min(weekDragStartY, weekDragCurrentY)
-        let height = abs(weekDragCurrentY - weekDragStartY)
-        let startHour = Int(top / hourHeight)
-        let endHour = Int((top + height) / hourHeight) + 1
+        let height = max(hourHeight, abs(weekDragCurrentY - weekDragStartY))  // Min 1 hour
+        
+        // Snap to 15-minute intervals
+        let startQuarters = Int(top / quarterHeight)
+        let endQuarters = max(startQuarters + 4, Int((top + height) / quarterHeight) + 1)  // Min 1 hour
+        
+        let startHour = startQuarters / 4
+        let startMinute = (startQuarters % 4) * 15
+        let endHour = endQuarters / 4
+        let endMinute = (endQuarters % 4) * 15
+        
+        // Snap preview position
+        let snappedTop = CGFloat(startQuarters) * quarterHeight
+        let snappedHeight = CGFloat(endQuarters - startQuarters) * quarterHeight
+        
+        // Duration text
+        let totalMinutes = (endQuarters - startQuarters) * 15
+        let durationText = totalMinutes >= 60 
+            ? "\(totalMinutes / 60)h\(totalMinutes % 60 > 0 ? " \(totalMinutes % 60)m" : "")"
+            : "\(totalMinutes)m"
         
         return VStack(spacing: 2) {
             Text("New Task")
-                .font(.system(size: 10, weight: .medium))
-            Text("\(formatHour(startHour))")
-                .font(.system(size: 9))
+                .font(.system(size: 10, weight: .bold))
+            Text("\(formatHourMinute(startHour, startMinute)) - \(formatHourMinute(endHour, endMinute))")
+                .font(.system(size: 9, weight: .medium))
+            Text(durationText)
+                .font(.system(size: 8))
+                .foregroundColor(.accentColor.opacity(0.8))
         }
         .foregroundColor(.accentColor)
         .frame(maxWidth: .infinity)
-        .frame(height: max(30, height))
+        .frame(height: max(hourHeight, snappedHeight))
         .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.accentColor.opacity(0.2))
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.accentColor.opacity(0.15))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 1, dash: [4]))
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Color.accentColor, lineWidth: 2)
                 )
         )
         .padding(.horizontal, 2)
-        .offset(y: top)
+        .offset(y: snappedTop)
+    }
+    
+    private func formatHourMinute(_ hour: Int, _ minute: Int) -> String {
+        let h = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour)
+        let period = hour >= 12 ? "PM" : "AM"
+        if minute == 0 {
+            return "\(h) \(period)"
+        } else {
+            return "\(h):\(String(format: "%02d", minute)) \(period)"
+        }
     }
     
     private func createTaskFromWeekDrag(day: Date) {
-        let startHour = Int(min(weekDragStartY, weekDragCurrentY) / hourHeight)
-        let endHour = Int(max(weekDragStartY, weekDragCurrentY) / hourHeight) + 1
+        // Use 15-minute precision (same as day view)
+        let quarterHeight = hourHeight / 4  // Each quarter = 15 minutes
+        
+        let startQuarters = Int(min(weekDragStartY, weekDragCurrentY) / quarterHeight)
+        let endQuarters = max(startQuarters + 4, Int(max(weekDragStartY, weekDragCurrentY) / quarterHeight) + 1)  // Minimum 1 hour (4 quarters)
+        
+        let startHour = startQuarters / 4
+        let startMinute = (startQuarters % 4) * 15
+        let endHour = endQuarters / 4
+        let endMinute = (endQuarters % 4) * 15
         
         let calendar = Calendar.current
         var startComps = calendar.dateComponents([.year, .month, .day], from: day)
         startComps.hour = max(0, min(23, startHour))
-        startComps.minute = 0
+        startComps.minute = startMinute
         
         var endComps = calendar.dateComponents([.year, .month, .day], from: day)
-        endComps.hour = max(1, min(24, endHour))
-        endComps.minute = 0
+        endComps.hour = max(0, min(24, endHour))
+        endComps.minute = endMinute
+        
+        // Handle end time going to next day
+        if endHour >= 24 {
+            endComps.hour = 23
+            endComps.minute = 59
+        }
         
         selectedDate = day
         dragStartTime = calendar.date(from: startComps)
         dragEndTime = calendar.date(from: endComps)
+        
+        print("DEBUG Week Drag: Start \(startHour):\(startMinute), End \(endHour):\(endMinute)")
         
         isWeekDragging = false
         weekDragDay = nil
@@ -1586,17 +1633,6 @@ struct FullCalendarView: View {
         .offset(y: snappedTop)
         .animation(.spring(response: 0.15, dampingFraction: 0.8), value: snappedTop)
         .animation(.spring(response: 0.15, dampingFraction: 0.8), value: snappedHeight)
-    }
-    
-    private func formatHourMinute(_ hour: Int, _ minute: Int) -> String {
-        let h = hour % 24
-        let period = h >= 12 ? "PM" : "AM"
-        let displayHour = h == 0 ? 12 : (h > 12 ? h - 12 : h)
-        if minute == 0 {
-            return "\(displayHour) \(period)"
-        } else {
-            return "\(displayHour):\(String(format: "%02d", minute)) \(period)"
-        }
     }
     
     // MARK: - Helpers
