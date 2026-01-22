@@ -2343,9 +2343,56 @@ struct ResizableTaskBlock: View {
         return String(format: "%d:%02d %@", h, minute, period)
     }
     
-    private var durationMinutes: Int? {
-        guard let start = task.startTime, let end = task.endTime else { return nil }
-        return Int(end.timeIntervalSince(start) / 60)
+    private var durationMinutes: Int {
+        // Use raw hour/minute values which are always available
+        return (task.endHour * 60 + task.endMinute) - (task.startHour * 60 + task.startMinute)
+    }
+    
+    // Get time range while dragging
+    private func getDragTimeRange() -> String {
+        let minutes = Int(dragOffset / hourHeight * 60)
+        let newStartMinutes = task.startHour * 60 + task.startMinute + minutes
+        let newEndMinutes = task.endHour * 60 + task.endMinute + minutes
+        
+        let newStartHour = max(0, (newStartMinutes / 60) % 24)
+        let newStartMin = ((newStartMinutes % 60) + 60) % 60
+        let newEndHour = max(0, (newEndMinutes / 60) % 24)
+        let newEndMin = ((newEndMinutes % 60) + 60) % 60
+        
+        return "\(formatTime12Hour(hour: newStartHour, minute: newStartMin)) - \(formatTime12Hour(hour: newEndHour, minute: newEndMin))"
+    }
+    
+    // Get duration while dragging (unchanged)
+    private func getDragDuration() -> String {
+        let duration = durationMinutes
+        if duration >= 60 {
+            let hours = duration / 60
+            let mins = duration % 60
+            return mins > 0 ? "\(hours)h \(mins)m" : "\(hours)h"
+        }
+        return "\(duration)m"
+    }
+    
+    // Get time range while resizing
+    private func getResizeTimeRange() -> String {
+        let minutes = Int(resizeDelta / hourHeight * 60)
+        let newEndMinutes = task.endHour * 60 + task.endMinute + minutes
+        let newEndHour = max(0, (newEndMinutes / 60) % 24)
+        let newEndMin = ((newEndMinutes % 60) + 60) % 60
+        
+        return "\(formatTime12Hour(hour: task.startHour, minute: task.startMinute)) - \(formatTime12Hour(hour: newEndHour, minute: newEndMin))"
+    }
+    
+    // Get duration while resizing
+    private func getResizeDuration() -> String {
+        let minutes = Int(resizeDelta / hourHeight * 60)
+        let newDuration = max(15, durationMinutes + minutes)
+        if newDuration >= 60 {
+            let hours = newDuration / 60
+            let mins = newDuration % 60
+            return mins > 0 ? "\(hours)h \(mins)m" : "\(hours)h"
+        }
+        return "\(newDuration)m"
     }
 
     var body: some View {
@@ -2361,13 +2408,21 @@ struct ResizableTaskBlock: View {
                 
                 VStack(alignment: .leading, spacing: 3) {
                     if isDragging {
-                        Text(getPreviewTime(dragOffset))
-                            .font(.system(size: 12, weight: .bold))
+                        // While dragging - show full time range
+                        Text(getDragTimeRange())
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundColor(task.type.color)
+                        Text(getDragDuration())
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(task.type.color.opacity(0.8))
                     } else if isResizing {
-                        Text("End: \(getPreviewEndTime())")
-                            .font(.system(size: 12, weight: .bold))
+                        // While resizing - show new time range and duration
+                        Text(getResizeTimeRange())
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundColor(task.type.color)
+                        Text(getResizeDuration())
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(task.type.color.opacity(0.8))
                     } else {
                         // Time display
                         Text(formatTimeRange())
@@ -2381,14 +2436,18 @@ struct ResizableTaskBlock: View {
                             .lineLimit(height > 60 ? 2 : 1)
                     }
                     
-                    // Duration badge for taller blocks
-                    if height > 50 && !isDragging && !isResizing, let mins = durationMinutes {
-                        Text("\(mins) min")
+                    // Duration badge - always show
+                    if !isDragging && !isResizing {
+                        let duration = durationMinutes
+                        let durationText = duration >= 60 
+                            ? "\(duration / 60)h\(duration % 60 > 0 ? " \(duration % 60)m" : "")"
+                            : "\(duration)m"
+                        Text(durationText)
                             .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(task.type.color)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.secondary.opacity(0.1))
+                            .background(task.type.color.opacity(0.1))
                             .clipShape(Capsule())
                     }
                 }
@@ -2619,6 +2678,65 @@ struct WeekTaskBlock: View {
         return formatTime12Hour(hour: max(0, newHour), minute: newMinute)
     }
     
+    // Get time range while dragging (start - end)
+    private func getDragPreviewTimeRange() -> String {
+        let minutes = Int(dragOffset / hourHeight * 60)
+        let newStartMinutes = task.startHour * 60 + task.startMinute + minutes
+        let newEndMinutes = task.endHour * 60 + task.endMinute + minutes
+        
+        let newStartHour = max(0, (newStartMinutes / 60) % 24)
+        let newStartMin = ((newStartMinutes % 60) + 60) % 60
+        let newEndHour = max(0, (newEndMinutes / 60) % 24)
+        let newEndMin = ((newEndMinutes % 60) + 60) % 60
+        
+        return "\(formatTime12Hour(hour: newStartHour, minute: newStartMin)) - \(formatTime12Hour(hour: newEndHour, minute: newEndMin))"
+    }
+    
+    // Get duration while dragging (unchanged)
+    private func getDragPreviewDuration() -> String {
+        let durationMinutes = (task.endHour * 60 + task.endMinute) - (task.startHour * 60 + task.startMinute)
+        return formatDuration(minutes: durationMinutes)
+    }
+    
+    // Get time range while resizing
+    private func getResizePreviewTimeRange() -> String {
+        let minutes = Int(resizeDelta / hourHeight * 60)
+        let newEndMinutes = task.endHour * 60 + task.endMinute + minutes
+        let newEndHour = max(0, (newEndMinutes / 60) % 24)
+        let newEndMin = ((newEndMinutes % 60) + 60) % 60
+        
+        return "\(formatTime12Hour(hour: task.startHour, minute: task.startMinute)) - \(formatTime12Hour(hour: newEndHour, minute: newEndMin))"
+    }
+    
+    // Get duration while resizing
+    private func getResizePreviewDuration() -> String {
+        let minutes = Int(resizeDelta / hourHeight * 60)
+        let originalDuration = (task.endHour * 60 + task.endMinute) - (task.startHour * 60 + task.startMinute)
+        let newDuration = max(15, originalDuration + minutes)
+        return formatDuration(minutes: newDuration)
+    }
+    
+    // Get task duration for normal display
+    private func getTaskDuration() -> String {
+        let durationMinutes = (task.endHour * 60 + task.endMinute) - (task.startHour * 60 + task.startMinute)
+        return formatDuration(minutes: durationMinutes)
+    }
+    
+    // Format duration in hours and minutes
+    private func formatDuration(minutes: Int) -> String {
+        if minutes >= 60 {
+            let hours = minutes / 60
+            let mins = minutes % 60
+            if mins > 0 {
+                return "\(hours)h \(mins)m"
+            } else {
+                return "\(hours)h"
+            }
+        } else {
+            return "\(minutes)m"
+        }
+    }
+    
     private func formatTime12Hour(hour: Int, minute: Int) -> String {
         let period = hour >= 12 ? "PM" : "AM"
         let h = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour)
@@ -2636,10 +2754,14 @@ struct WeekTaskBlock: View {
                     .frame(width: 3)
 
                 if isDragging {
+                    // While dragging - show full time range and duration
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(getPreviewTime())
+                        Text(getDragPreviewTimeRange())
                             .font(.system(size: 9, weight: .bold))
                             .foregroundColor(task.type.color)
+                        Text(getDragPreviewDuration())
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundColor(task.type.color.opacity(0.8))
                         // Show day change indicator
                         let dayChange = Int(round(horizontalOffset / dayWidth))
                         if dayChange != 0 {
@@ -2655,30 +2777,32 @@ struct WeekTaskBlock: View {
                     .padding(.horizontal, 3)
                     .padding(.vertical, 2)
                 } else if isResizing {
-                    Text(getPreviewEndTime())
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(task.type.color)
-                        .padding(.horizontal, 3)
-                        .padding(.vertical, 2)
+                    // While resizing - show end time and new duration
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(getResizePreviewTimeRange())
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(task.type.color)
+                        Text(getResizePreviewDuration())
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundColor(task.type.color.opacity(0.8))
+                    }
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 2)
                 } else {
+                    // Normal display - show title, time range, and duration
                     VStack(alignment: .leading, spacing: 1) {
                         Text(task.title)
-                            .font(.system(size: 9))
+                            .font(.system(size: 9, weight: .medium))
                             .foregroundColor(task.isCompleted ? .secondary : .primary)
                             .lineLimit(1)
-                        // Show time and duration in week view
-                        if height > 30 {
-                            HStack(spacing: 4) {
-                                Text(task.timeText)
-                                    .font(.system(size: 7))
-                                    .foregroundColor(.secondary)
-                                if let start = task.startTime, let end = task.endTime {
-                                    let mins = Int(end.timeIntervalSince(start) / 60)
-                                    Text("• \(mins)m")
-                                        .font(.system(size: 7))
-                                        .foregroundColor(task.type.color)
-                                }
-                            }
+                        // Always show time and duration
+                        HStack(spacing: 4) {
+                            Text(task.timeText)
+                                .font(.system(size: 7))
+                                .foregroundColor(.secondary)
+                            Text("• \(getTaskDuration())")
+                                .font(.system(size: 7, weight: .medium))
+                                .foregroundColor(task.type.color)
                         }
                     }
                     .padding(.horizontal, 3)
