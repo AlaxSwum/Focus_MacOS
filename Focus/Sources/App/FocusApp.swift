@@ -4929,9 +4929,16 @@ class FloatingNotificationManager {
                 
                 // Only notify at exactly 5 minutes before (within a 1-minute window: 4-5 minutes)
                 // This prevents multiple notifications and only fires once
+                // Works for both tasks AND meetings
                 if minutesUntilTask >= 4 && minutesUntilTask <= 5 {
                     self.notifiedTaskIds.insert(notificationId)
-                    self.showTaskReminder(task: task, minutesBefore: 5)
+                    
+                    // Show appropriate reminder based on type
+                    if task.type == .meeting {
+                        self.showMeetingReminder(task: task, minutesBefore: 5)
+                    } else {
+                        self.showTaskReminder(task: task, minutesBefore: 5)
+                    }
                     print("DEBUG: Showing reminder for '\(task.title)' - \(minutesUntilTask) minutes until start")
                 }
             }
@@ -4988,6 +4995,41 @@ class FloatingNotificationManager {
                 },
                 onSkip: {
                     // skipTask shows its own notification, don't call dismiss after
+                    self.skipTask(task)
+                },
+                onDismiss: { self.dismiss() },
+                showCloseButton: true
+            )
+            
+            self.showWindow(with: notificationView, height: 140, duration: 30.0, hasActions: true)
+        }
+    }
+    
+    func showMeetingReminder(task: TaskItem, minutesBefore: Int = 5) {
+        DispatchQueue.main.async {
+            self.dismiss()
+            NSSound(named: "Glass")?.play()
+            
+            let timeStr = self.formatTime12Hour(hour: task.startHour, minute: task.startMinute)
+            let isNow = minutesBefore == 0
+            let message = isNow ? "Starting now!" : "Starting in \(minutesBefore) min • \(timeStr)"
+            
+            let notificationView = FloatingNotificationView(
+                title: "Meeting Reminder",
+                subtitle: task.title,
+                message: message,
+                task: task,
+                onDone: {
+                    // Open meeting link if available
+                    if let link = task.meetingLink, let url = URL(string: link) {
+                        NSWorkspace.shared.open(url)
+                    }
+                    self.markTaskDone(task)
+                },
+                onSnooze: {
+                    self.snoozeTask(task)
+                },
+                onSkip: {
                     self.skipTask(task)
                 },
                 onDismiss: { self.dismiss() },

@@ -1667,8 +1667,6 @@ struct FullCalendarView: View {
     }
     
     private func updateTaskDuration(_ task: TaskItem, offsetMinutes: Int) {
-        guard let endTime = task.endTime, let startTime = task.startTime else { return }
-
         // Round to nearest 15 minutes
         var roundedMinutes = ((offsetMinutes + 7) / 15) * 15
         if roundedMinutes == 0 && abs(offsetMinutes) >= 5 {
@@ -1676,9 +1674,12 @@ struct FullCalendarView: View {
         }
         guard roundedMinutes != 0 else { return }
 
-        let newEndTime = endTime.addingTimeInterval(Double(roundedMinutes * 60))
-        let newDuration = newEndTime.timeIntervalSince(startTime)
-        if newDuration < 900 { return }
+        // Use raw hour/minute values (not Date properties which may be nil)
+        let currentDurationMinutes = (task.endHour * 60 + task.endMinute) - (task.startHour * 60 + task.startMinute)
+        let newDurationMinutes = currentDurationMinutes + roundedMinutes
+        
+        // Minimum duration of 15 minutes
+        if newDurationMinutes < 15 { return }
 
         // Calculate new end hour/minute
         let totalEndMinutes = task.endHour * 60 + task.endMinute + roundedMinutes
