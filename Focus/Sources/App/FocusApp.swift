@@ -4912,16 +4912,24 @@ class FloatingNotificationManager {
             let tasks = TaskManager.shared.todayTasks
             let calendar = Calendar.current
             let now = Date()
+            let today = calendar.startOfDay(for: now)
             let currentHour = calendar.component(.hour, from: now)
             let currentMinute = calendar.component(.minute, from: now)
             let currentTotalMinutes = currentHour * 60 + currentMinute
             
             for task in tasks {
+                // IMPORTANT: Only check tasks that are for TODAY
+                let taskDay = calendar.startOfDay(for: task.date)
+                guard calendar.isDate(taskDay, inSameDayAs: today) else { 
+                    continue  // Skip tasks from other days
+                }
+                
                 // Skip completed or skipped tasks
                 if task.isCompleted || task.isSkipped { continue }
                 
-                // Skip already notified tasks
-                let notificationId = "\(task.id)-\(task.startHour)-\(task.startMinute)"
+                // Skip already notified tasks (include date in ID to prevent cross-day issues)
+                let dateStr = calendar.component(.day, from: task.date)
+                let notificationId = "\(task.id)-\(dateStr)-\(task.startHour)-\(task.startMinute)"
                 if self.notifiedTaskIds.contains(notificationId) { continue }
                 
                 let taskTotalMinutes = task.startHour * 60 + task.startMinute
@@ -4929,7 +4937,6 @@ class FloatingNotificationManager {
                 
                 // Only notify at exactly 5 minutes before (within a 1-minute window: 4-5 minutes)
                 // This prevents multiple notifications and only fires once
-                // Works for both tasks AND meetings
                 if minutesUntilTask >= 4 && minutesUntilTask <= 5 {
                     self.notifiedTaskIds.insert(notificationId)
                     
@@ -4939,7 +4946,7 @@ class FloatingNotificationManager {
                     } else {
                         self.showTaskReminder(task: task, minutesBefore: 5)
                     }
-                    print("DEBUG: Showing reminder for '\(task.title)' - \(minutesUntilTask) minutes until start")
+                    print("DEBUG: Showing reminder for '\(task.title)' on \(task.date) - \(minutesUntilTask) minutes until start")
                 }
             }
             
