@@ -5572,6 +5572,7 @@ struct AddMeetingSheet: View {
     }
     
     private func createMeeting(userId: Int) async {
+        // Match website's meeting creation format exactly
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         
@@ -5583,37 +5584,28 @@ struct AddMeetingSheet: View {
         let minute = calendar.component(.minute, from: meetingTime)
         let startTimeStr = String(format: "%02d:%02d:00", hour, minute)
         
-        // Calculate end time based on duration
-        let endMinutes = hour * 60 + minute + duration
-        let endHour = (endMinutes / 60) % 24
-        let endMin = endMinutes % 60
-        let endTimeStr = String(format: "%02d:%02d:00", endHour, endMin)
-        
         let now = Date()
         let nowStr = isoFormatter.string(from: now)
         
+        // Website uses these exact fields - matching supabase.js createMeeting function
         var meetingData: [String: Any] = [
-            "user_id": userId,
-            "created_by_id": userId,
             "title": title,
+            "description": description,
             "date": dateFormatter.string(from: meetingDate),
             "time": startTimeStr,
-            "end_time": endTimeStr,
             "duration": duration,
-            "completed": false,
+            "created_by_id": userId,
             "created_at": nowStr,
             "updated_at": nowStr
         ]
         
-        if !description.isEmpty { meetingData["description"] = description }
-        if !meetingLink.isEmpty { meetingData["meeting_link"] = meetingLink }
-        if !attendees.isEmpty { meetingData["attendees_list"] = attendees }
-        if !agendaItems.isEmpty { meetingData["agenda_items"] = agendaItems }
+        // Project ID - website uses "project_id" field
         if selectedProject > 0 {
             meetingData["project_id"] = selectedProject
         }
-        if reminderMinutes > 0 { meetingData["reminder_time"] = reminderMinutes }
-        meetingData["is_recurring"] = isRecurring
+        
+        // Attendee IDs - website uses attendee_ids as integer array
+        // For now, we don't have attendee selection UI, so skip this
         
         guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting") else { return }
         
@@ -5740,6 +5732,10 @@ struct FullRuleBookView: View {
             }
         } message: {
             Text("Are you sure you want to delete '\(ruleToDelete?.title ?? "")'? This cannot be undone.")
+        }
+        .onAppear {
+            // Check and reset rules when view appears (daily resets daily, weekly at end of week, etc.)
+            ruleManager.refreshRules()
         }
     }
     

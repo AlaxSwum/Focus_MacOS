@@ -33,6 +33,8 @@ class RuleManager: ObservableObject {
     
     private init() {
         loadFromLocalStorage()
+        // Check and reset rules based on their period (daily, weekly, etc.)
+        checkAndResetPeriods()
     }
     
     private func loadFromLocalStorage() {
@@ -59,6 +61,11 @@ class RuleManager: ObservableObject {
     var weeklyRules: [Rule] { rules.filter { $0.period == .weekly && $0.isActive } }
     var monthlyRules: [Rule] { rules.filter { $0.period == .monthly && $0.isActive } }
     var yearlyRules: [Rule] { rules.filter { $0.period == .yearly && $0.isActive } }
+    
+    /// Call this when entering Rule Book view to ensure rules are reset properly
+    func refreshRules() {
+        checkAndResetPeriods()
+    }
     
     func addRule(title: String, description: String?, period: RulePeriod, targetCount: Int, emoji: String?, colorHex: String?, userId: Int) {
         let now = Date()
