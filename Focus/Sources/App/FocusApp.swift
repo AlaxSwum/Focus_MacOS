@@ -2319,7 +2319,9 @@ extension MenuBarDropdownView {
         
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Focus"
-        window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
+        window.styleMask = [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView]
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         window.setContentSize(NSSize(width: 1400, height: 900))
         window.minSize = NSSize(width: 1200, height: 800)
         window.center()
