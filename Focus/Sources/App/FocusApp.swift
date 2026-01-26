@@ -4248,280 +4248,96 @@ struct FullAppWindowView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var taskManager: TaskManager
     @State private var selectedTab = 0
-    @State private var tabDirection: Int = 0
-    @State private var isAppearing = false
 
     var body: some View {
-        ZStack {
-            Color(nsColor: NSColor.windowBackgroundColor)
-                .ignoresSafeArea()
-            
+        VStack(spacing: 0) {
             if authManager.isAuthenticated {
-                mainContent
-                    .opacity(isAppearing ? 1 : 0)
-                    .scaleEffect(isAppearing ? 1 : 0.95)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: isAppearing)
+                // NAVIGATION TABS - Always visible at top
+                navigationTabs
+                
+                // Content based on selected tab
+                contentForTab
             } else {
                 LoginView()
                     .environmentObject(authManager)
             }
         }
-        .onAppear {
-            withAnimation {
-                isAppearing = true
-            }
-        }
+        .background(Color(nsColor: NSColor.windowBackgroundColor))
     }
     
-    private var mainContent: some View {
-        VStack(spacing: 0) {
-            headerBar
-            
-            // Main content area with smooth transitions
-            ZStack {
-                Color(nsColor: NSColor.windowBackgroundColor)
-                
-                // Use id to force view recreation for smooth transition
-                Group {
-                switch selectedTab {
-                case 0:
-                    FullCalendarView()
-                        .environmentObject(taskManager)
-                        .environmentObject(authManager)
-                case 1:
-                    FullTodoView()
-                        .environmentObject(taskManager)
-                        .environmentObject(authManager)
-                case 2:
-                    FullMeetingsView()
-                        .environmentObject(taskManager)
-                        .environmentObject(authManager)
-                case 3:
-                    FullRuleBookView()
-                        .environmentObject(taskManager)
-                        .environmentObject(authManager)
-                case 4:
-                    FullJournalView()
-                        .environmentObject(taskManager)
-                        .environmentObject(authManager)
-                default:
-                    FullCalendarView()
-                        .environmentObject(taskManager)
-                        .environmentObject(authManager)
-                }
-            }
-                .id(selectedTab)
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
-            }
-            .animation(.easeInOut(duration: 0.3), value: selectedTab)
-        }
-        .frame(minWidth: 1200, minHeight: 800)
-        .onAppear {
-            if let userId = authManager.currentUser?.id {
-                Task {
-                    await taskManager.fetchTasks(for: userId)
-                }
-            }
-        }
-    }
-    
-    private var headerBar: some View {
+    // Simple, always-visible navigation tabs
+    private var navigationTabs: some View {
         HStack(spacing: 0) {
-            // Left section - Logo and progress
-            HStack(spacing: 16) {
-            // Logo
-                HStack(spacing: 8) {
-                    if let nsImage = loadAppLogo() {
-                        Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                            .frame(width: 24, height: 24)
-                } else {
-                    Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 20))
-                        .foregroundColor(.accentColor)
-                }
-                
-                Text("Focus")
-                        .font(.system(size: 16, weight: .semibold))
-            }
-            
-                // Progress pill
-            let progress = getProgress()
-                HStack(spacing: 8) {
-                ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
-                    .progressViewStyle(.linear)
-                        .frame(width: 80)
-                    .tint(progress.completed == progress.total ? .green : .accentColor)
-                
-                Text("\(progress.completed)/\(progress.total)")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(nsColor: NSColor.controlBackgroundColor))
-                .clipShape(Capsule())
-            }
-            
-            Spacer()
-            
-            // Center section - Tab Selector (prominent)
-            HStack(spacing: 4) {
-                tabButton("Personal", icon: "calendar", index: 0)
-                tabButton("To Do", icon: "checklist", index: 1)
-                tabButton("Meetings", icon: "video", index: 2)
-                tabButton("Rule Book", icon: "book.closed", index: 3)
-                tabButton("Journal", icon: "book.pages", index: 4)
-            }
-            .padding(4)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(nsColor: NSColor.windowBackgroundColor))
-                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(Color(nsColor: NSColor.separatorColor).opacity(0.5), lineWidth: 1)
-            )
-            
-            Spacer()
-            
-            // Right section - Actions
-            HStack(spacing: 12) {
-                    Button {
-                    // Open Journaling
-                    withAnimation { selectedTab = 4 }
-                    } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "book.pages.fill")
-                            .font(.system(size: 11))
-                        Text("Journal")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .foregroundColor(.purple)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.purple.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    }
-                    .buttonStyle(.plain)
+            ForEach(0..<5, id: \.self) { index in
+                let titles = ["Personal", "To Do", "Meetings", "Rule Book", "Journal"]
+                let icons = ["calendar", "checklist", "video.fill", "book.closed.fill", "book.pages.fill"]
+                let colors: [Color] = [.blue, .green, .purple, .orange, .pink]
                 
                 Button {
-                    // Open To Do page
-                    withAnimation { selectedTab = 1 }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checklist")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("To Do")
-                            .font(.system(size: 12, weight: .medium))
+                    withAnimation(.spring(response: 0.3)) {
+                        selectedTab = index
                     }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.blue)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-                
-                Button {
-                    // Add Task
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("Add Task")
-                            .font(.system(size: 12, weight: .medium))
+                    HStack(spacing: 8) {
+                        Image(systemName: icons[index])
+                            .font(.system(size: 14, weight: .semibold))
+                        Text(titles[index])
+                            .font(.system(size: 14, weight: .semibold))
                     }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.accentColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .foregroundColor(selectedTab == index ? .white : .primary)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(selectedTab == index ? colors[index] : Color.clear)
+                    )
                 }
                 .buttonStyle(.plain)
             }
+            
+            Spacer()
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
-        .background(
-            ZStack {
-                Color(nsColor: NSColor.controlBackgroundColor)
-                
-                // Subtle gradient for depth
-                LinearGradient(
-                    colors: [Color.white.opacity(0.05), Color.clear],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-        )
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Color(nsColor: NSColor.controlBackgroundColor))
         .overlay(
             Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color(nsColor: NSColor.separatorColor), Color(nsColor: NSColor.separatorColor).opacity(0.5)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
+                .fill(Color(nsColor: NSColor.separatorColor))
                 .frame(height: 1),
             alignment: .bottom
         )
-        .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
-        .frame(height: 60)  // Fixed height to ensure visibility
     }
     
-    @State private var hoveredTab: Int? = nil
-    
-    private func tabButton(_ title: String, icon: String, index: Int) -> some View {
-        Button {
-            let oldTab = selectedTab
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                tabDirection = index > oldTab ? 1 : -1
-                selectedTab = index
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: selectedTab == index ? .semibold : .regular))
-                    .symbolEffect(.bounce, value: selectedTab == index)
-                Text(title)
-                    .font(.system(size: 13, weight: selectedTab == index ? .semibold : .medium))
-            }
-            .foregroundColor(selectedTab == index ? .white : (hoveredTab == index ? .primary : .secondary))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
-            .background(
-                ZStack {
-                    if selectedTab == index {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.accentColor)
-                    } else if hoveredTab == index {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.accentColor.opacity(0.1))
-                    }
-                }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .scaleEffect(selectedTab == index ? 1.02 : (hoveredTab == index ? 1.01 : 1.0))
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                hoveredTab = isHovering ? index : nil
-            }
+    @ViewBuilder
+    private var contentForTab: some View {
+        switch selectedTab {
+        case 0:
+            FullCalendarView()
+                .environmentObject(taskManager)
+                .environmentObject(authManager)
+        case 1:
+            FullTodoView()
+                .environmentObject(taskManager)
+                .environmentObject(authManager)
+        case 2:
+            FullMeetingsView()
+                .environmentObject(taskManager)
+                .environmentObject(authManager)
+        case 3:
+            FullRuleBookView()
+                .environmentObject(taskManager)
+                .environmentObject(authManager)
+        case 4:
+            FullJournalView()
+                .environmentObject(taskManager)
+                .environmentObject(authManager)
+        default:
+            FullCalendarView()
+                .environmentObject(taskManager)
+                .environmentObject(authManager)
         }
     }
     
-    private func getProgress() -> (completed: Int, total: Int) {
-        let today = Calendar.current.startOfDay(for: Date())
-        let todayTasks = taskManager.todayTasks.filter { Calendar.current.isDate($0.date, inSameDayAs: today) }
-        let total = todayTasks.count
-        let completed = todayTasks.filter { $0.isCompleted }.count
-        return (completed, total)
-    }
 }
 
 // MARK: - Custom Floating Window (stays visible above all apps including full screen)
