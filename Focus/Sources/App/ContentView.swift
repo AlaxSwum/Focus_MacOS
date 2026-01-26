@@ -5609,7 +5609,21 @@ struct AddMeetingSheet: View {
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: meetingData)
-            let (_, _) = try await URLSession.shared.data(for: request)
+            print("DEBUG: Creating meeting with data: \(meetingData)")
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("DEBUG: Meeting creation response status: \(httpResponse.statusCode)")
+                if let responseBody = String(data: data, encoding: .utf8) {
+                    print("DEBUG: Response body: \(responseBody)")
+                }
+                if httpResponse.statusCode == 201 || httpResponse.statusCode == 200 {
+                    print("DEBUG: Meeting created successfully!")
+                } else {
+                    print("DEBUG: Meeting creation may have failed with status: \(httpResponse.statusCode)")
+                }
+            }
         } catch {
             print("Failed to save meeting: \(error)")
         }
@@ -5624,6 +5638,10 @@ struct FullRuleBookView: View {
     @State private var selectedPeriod: Int = 1
     @State private var hoveredPeriod: Int? = nil
     @State private var hoveredRule: String? = nil
+    @State private var showEditRule = false
+    @State private var showDeleteConfirm = false
+    @State private var ruleToEdit: Rule? = nil
+    @State private var ruleToDelete: Rule? = nil
     
     private var filteredRules: [Rule] {
         switch selectedPeriod {
@@ -5691,6 +5709,21 @@ struct FullRuleBookView: View {
                 endPoint: .bottomTrailing
             )
         )
+        .sheet(isPresented: $showEditRule) {
+            if let rule = ruleToEdit {
+                EditRuleSheet(rule: rule, isPresented: $showEditRule, ruleManager: ruleManager)
+            }
+        }
+        .alert("Delete Rule", isPresented: $showDeleteConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                if let rule = ruleToDelete {
+                    ruleManager.deleteRule(rule)
+                }
+            }
+        } message: {
+            Text("Are you sure you want to delete '\(ruleToDelete?.title ?? "")'? This cannot be undone.")
+        }
     }
     
     // MARK: - Left Sidebar
@@ -6049,6 +6082,23 @@ struct FullRuleBookView: View {
                 hoveredRule = h ? rule.id : nil
             }
         }
+        .contextMenu {
+            Button {
+                ruleToEdit = rule
+                showEditRule = true
+            } label: {
+                Label("Edit Rule", systemImage: "pencil")
+            }
+            
+            Divider()
+            
+            Button(role: .destructive) {
+                ruleToDelete = rule
+                showDeleteConfirm = true
+            } label: {
+                Label("Delete Rule", systemImage: "trash")
+            }
+        }
     }
     
     private var emptyState: some View {
@@ -6352,6 +6402,193 @@ struct FullRuleBookView: View {
         window.level = .floating
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+// MARK: - Edit Rule Sheet
+struct EditRuleSheet: View {
+    let rule: Rule
+    @Binding var isPresented: Bool
+    @ObservedObject var ruleManager: RuleManager
+    
+    @State private var title: String = ""
+    @State private var description: String = ""
+    @State private var targetCount: Int = 1
+    @State private var selectedPeriod: RulePeriod = .daily
+    @State private var selectedEmoji: String = "star.fill"
+    @State private var selectedColor: Color = .blue
+    
+    private let emojiOptions = [
+        "star.fill", "heart.fill", "flame.fill", "bolt.fill", "moon.fill",
+        "sun.max.fill", "leaf.fill", "drop.fill", "figure.run", "dumbbell.fill",
+        "book.fill", "pencil", "lightbulb.fill", "brain.head.profile", "bed.double.fill",
+        "cup.and.saucer.fill", "fork.knife", "pills.fill", "cross.fill", "timer"
+    ]
+    
+    private let colorOptions: [Color] = [
+        .blue, .purple, .pink, .red, .orange, .yellow, .green, .mint, .cyan, .indigo
+    ]
+    
+    init(rule: Rule, isPresented: Binding<Bool>, ruleManager: RuleManager) {
+        self.rule = rule
+        self._isPresented = isPresented
+        self.ruleManager = ruleManager
+        _title = State(initialValue: rule.title)
+        _description = State(initialValue: rule.description ?? "")
+        _targetCount = State(initialValue: rule.targetCount)
+        _selectedPeriod = State(initialValue: rule.period)
+        _selectedEmoji = State(initialValue: rule.emoji ?? "star.fill")
+        _selectedColor = State(initialValue: rule.color)
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Edit Rule")
+                    .font(.system(size: 18, weight: .bold))
+                Spacer()
+                Button { isPresented = false } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(20)
+            
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Title
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Title")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        TextField("Rule title", text: $title)
+                            .textFieldStyle(.plain)
+                            .padding(12)
+                            .background(Color(nsColor: NSColor.controlBackgroundColor))
+                            .cornerRadius(10)
+                    }
+                    
+                    // Description
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Description (optional)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        TextField("Description", text: $description)
+                            .textFieldStyle(.plain)
+                            .padding(12)
+                            .background(Color(nsColor: NSColor.controlBackgroundColor))
+                            .cornerRadius(10)
+                    }
+                    
+                    // Period
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Period")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Picker("", selection: $selectedPeriod) {
+                            Text("Daily").tag(RulePeriod.daily)
+                            Text("Weekly").tag(RulePeriod.weekly)
+                            Text("Monthly").tag(RulePeriod.monthly)
+                            Text("Yearly").tag(RulePeriod.yearly)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    
+                    // Target Count
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Target Count")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Stepper("\(targetCount) time\(targetCount > 1 ? "s" : "")", value: $targetCount, in: 1...100)
+                            .padding(12)
+                            .background(Color(nsColor: NSColor.controlBackgroundColor))
+                            .cornerRadius(10)
+                    }
+                    
+                    // Icon
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Icon")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 10), spacing: 8) {
+                            ForEach(emojiOptions, id: \.self) { emoji in
+                                Button {
+                                    selectedEmoji = emoji
+                                } label: {
+                                    Image(systemName: emoji)
+                                        .font(.system(size: 18))
+                                        .foregroundColor(selectedEmoji == emoji ? .white : .primary)
+                                        .frame(width: 36, height: 36)
+                                        .background(selectedEmoji == emoji ? selectedColor : Color(nsColor: NSColor.controlBackgroundColor))
+                                        .cornerRadius(8)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    
+                    // Color
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Color")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        HStack(spacing: 8) {
+                            ForEach(colorOptions, id: \.self) { color in
+                                Button {
+                                    selectedColor = color
+                                } label: {
+                                    Circle()
+                                        .fill(color)
+                                        .frame(width: 28, height: 28)
+                                        .overlay(
+                                            Circle()
+                                                .strokeBorder(.white, lineWidth: selectedColor == color ? 3 : 0)
+                                        )
+                                        .shadow(color: selectedColor == color ? color.opacity(0.5) : .clear, radius: 4)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+            }
+            
+            // Save Button
+            Button {
+                saveRule()
+            } label: {
+                Text("Save Changes")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(colors: [selectedColor, selectedColor.opacity(0.8)], startPoint: .leading, endPoint: .trailing)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            .disabled(title.isEmpty)
+            .padding(20)
+        }
+        .frame(width: 450, height: 550)
+    }
+    
+    private func saveRule() {
+        var updatedRule = rule
+        updatedRule.title = title
+        updatedRule.description = description.isEmpty ? nil : description
+        updatedRule.period = selectedPeriod
+        updatedRule.targetCount = targetCount
+        updatedRule.emoji = selectedEmoji
+        updatedRule.colorHex = selectedColor.toHex()
+        
+        ruleManager.updateRule(updatedRule)
+        isPresented = false
     }
 }
 
@@ -8066,19 +8303,27 @@ struct JournalEditorView: View {
     
     // MARK: - Execution Section
     private var executionSection: some View {
-        VStack(alignment: .leading, spacing: 32) {
+        let calendar = Calendar.current
+        let entryDateStart = calendar.startOfDay(for: entry.date)
+        
+        // Filter tasks for the journal entry date (not just today)
+        let tasksForDate = taskManager.todayTasks.filter { task in
+            let taskDateStart = calendar.startOfDay(for: task.date)
+            return calendar.isDate(taskDateStart, inSameDayAs: entryDateStart)
+        }
+        let completedTasks = tasksForDate.filter { $0.isCompleted }
+        let unfinishedTasks = tasksForDate.filter { !$0.isCompleted && $0.type != .todo }
+        
+        return VStack(alignment: .leading, spacing: 28) {
             // Task Summary Cards
             HStack(spacing: 16) {
-                let completed = taskManager.todayTasks.filter { $0.isCompleted }
-                let missed = taskManager.todayTasks.filter { !$0.isCompleted && $0.type != .meeting }
-                
                 // Completed Card
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 20))
                             .foregroundColor(.green)
-                        Text("\(completed.count)")
+                        Text("\(completedTasks.count)")
                             .font(.system(size: 28, weight: .bold))
                     }
                     Text("Completed")
@@ -8090,25 +8335,117 @@ struct JournalEditorView: View {
                 .background(Color.green.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 
-                // Missed Card
+                // Unfinished Card
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Image(systemName: "xmark.circle.fill")
+                        Image(systemName: "circle.dashed")
                             .font(.system(size: 20))
-                            .foregroundColor(.red)
-                        Text("\(missed.count)")
+                            .foregroundColor(.orange)
+                        Text("\(unfinishedTasks.count)")
                             .font(.system(size: 28, weight: .bold))
                     }
-                    Text("Missed")
+                    Text("Unfinished")
                         .font(.system(size: 13))
                         .foregroundColor(.secondary)
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.red.opacity(0.08))
+                .background(Color.orange.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
             }
             
+            // Completed Tasks List
+            if !completedTasks.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundColor(.green)
+                        Text("Completed Tasks")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    
+                    VStack(spacing: 8) {
+                        ForEach(completedTasks, id: \.id) { task in
+                            HStack(spacing: 12) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                    .font(.system(size: 16))
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(task.title)
+                                        .font(.system(size: 14))
+                                        .strikethrough(true, color: .secondary)
+                                        .foregroundColor(.secondary)
+                                    Text(task.timeText)
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary.opacity(0.7))
+                                }
+                                
+                                Spacer()
+                                
+                                Text(task.type.displayName)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(task.type.color)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(task.type.color.opacity(0.1))
+                                    .clipShape(Capsule())
+                            }
+                            .padding(12)
+                            .background(Color.green.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
+                }
+            }
+            
+            // Unfinished Tasks List - for reflection
+            if !unfinishedTasks.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("Unfinished Tasks - Reflect on these")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    
+                    VStack(spacing: 8) {
+                        ForEach(unfinishedTasks, id: \.id) { task in
+                            HStack(spacing: 12) {
+                                Image(systemName: "circle")
+                                    .foregroundColor(.orange)
+                                    .font(.system(size: 16))
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(task.title)
+                                        .font(.system(size: 14))
+                                    Text(task.timeText)
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                Text(task.type.displayName)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(task.type.color)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(task.type.color.opacity(0.1))
+                                    .clipShape(Capsule())
+                            }
+                            .padding(12)
+                            .background(Color.orange.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
+                }
+            }
+            
+            Divider()
+                .padding(.vertical, 8)
+            
+            // Reflection Fields
             cleanFieldRow("Planned vs Actual", text: $entry.plannedVsDid, placeholder: "How did reality compare to your plan?", icon: "arrow.left.arrow.right")
             cleanFieldRow("Biggest Win", text: $entry.biggestWin, placeholder: "What are you most proud of?", icon: "trophy.fill")
             cleanFieldRow("Biggest Miss", text: $entry.biggestMiss, placeholder: "Where did you fall short?", icon: "arrow.down.circle")

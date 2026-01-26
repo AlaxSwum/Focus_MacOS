@@ -130,6 +130,18 @@ class RuleManager: ObservableObject {
         }
     }
     
+    func updateRule(_ rule: Rule) {
+        if let index = rules.firstIndex(where: { $0.id == rule.id }) {
+            rules[index] = rule
+            saveToLocalStorage()
+        }
+    }
+    
+    func deleteRule(_ rule: Rule) {
+        rules.removeAll { $0.id == rule.id }
+        saveToLocalStorage()
+    }
+    
     func checkAndResetPeriods() {
         let now = Date()
         let calendar = Calendar.current
@@ -1742,14 +1754,14 @@ extension MenuBarDropdownView {
             // Completed todos are deleted when checked
             let todos = taskManager.todayTasks.filter { $0.type == .todo && !$0.isCompleted }
                 .sorted { task1, task2 in
-                    let time1 = task1.endHour * 60 + task1.endMinute
-                    let time2 = task2.endHour * 60 + task2.endMinute
-                    return time1 < time2
-                }
+                let time1 = task1.endHour * 60 + task1.endMinute
+                let time2 = task2.endHour * 60 + task2.endMinute
+                return time1 < time2
+            }
             
             ScrollView {
                 VStack(spacing: 8) {
-                    if todos.isEmpty {
+            if todos.isEmpty {
                         VStack(spacing: 16) {
                             ZStack {
                                 Circle()
@@ -1764,20 +1776,20 @@ extension MenuBarDropdownView {
                                     .font(.system(size: 14, weight: .semibold))
                                 Text("No pending todos")
                                     .font(.system(size: 12))
-                                    .foregroundColor(.secondary)
-                            }
+                        .foregroundColor(.secondary)
+                }
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 40)
                         .transition(.scale.combined(with: .opacity))
-                    } else {
-                        ForEach(todos) { task in
-                            taskRow(task)
+            } else {
+                ForEach(todos) { task in
+                    taskRow(task)
                                 .transition(.asymmetric(
                                     insertion: .move(edge: .top).combined(with: .opacity),
                                     removal: .move(edge: .trailing).combined(with: .opacity)
                                 ))
-                        }
+                }
                     }
                 }
                 .padding(.horizontal, 12)
@@ -4368,10 +4380,10 @@ struct FullAppWindowView: View {
             
             // Right section - Actions
             HStack(spacing: 12) {
-                Button {
+                    Button {
                     // Open Journaling
                     withAnimation { selectedTab = 4 }
-                } label: {
+                    } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "book.pages.fill")
                             .font(.system(size: 11))
@@ -4383,8 +4395,8 @@ struct FullAppWindowView: View {
                     .padding(.vertical, 6)
                     .background(Color.purple.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
+                    }
+                    .buttonStyle(.plain)
                 
                 Button {
                     // Open To Do page
@@ -5014,7 +5026,7 @@ class FloatingNotificationManager {
     
     func showMeetingReminder(task: TaskItem, minutesBefore: Int = 5) {
         DispatchQueue.main.async {
-            self.dismiss()
+                    self.dismiss()
             NSSound(named: "Glass")?.play()
             
             let timeStr = self.formatTime12Hour(hour: task.startHour, minute: task.startMinute)
@@ -5076,14 +5088,14 @@ class FloatingNotificationManager {
             )
         } else {
             // Use panel for simple notifications
-            let panel = NSPanel(
+        let panel = NSPanel(
                 contentRect: NSRect(x: startX, y: windowY, width: windowWidth, height: windowHeight),
-                styleMask: [.borderless, .nonactivatingPanel],
-                backing: .buffered,
-                defer: false
-            )
-            panel.becomesKeyOnlyIfNeeded = true
-            panel.isFloatingPanel = true
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.becomesKeyOnlyIfNeeded = true
+        panel.isFloatingPanel = true
             window = panel
         }
         
@@ -5623,7 +5635,7 @@ struct RuleRowView: View {
                 HStack(spacing: 6) {
                     if let iconName = rule.emoji {
                         Image(systemName: iconName)
-                            .font(.system(size: 12))
+                        .font(.system(size: 12))
                             .foregroundColor(rule.color)
                     }
                     Text(rule.title)
@@ -5641,7 +5653,7 @@ struct RuleRowView: View {
                         Text("\(rule.currentCount)/\(rule.targetCount)")
                             .font(.system(size: 10, weight: .medium))
                     }
-                    .foregroundColor(.secondary)
+                        .foregroundColor(.secondary)
                     
                     // Streak
                     if rule.streakCount > 0 {
@@ -5720,9 +5732,9 @@ struct AddRuleSheet: View {
                 Text("New Rule")
                     .font(.system(size: 18, weight: .bold))
                 Spacer()
-                Button {
+                            Button {
                     isPresented = false
-                } label: {
+                            } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 22))
                         .foregroundColor(.secondary)
@@ -5736,7 +5748,7 @@ struct AddRuleSheet: View {
                     // Icon picker (SF Symbols instead of emojis)
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Icon")
-                            .font(.system(size: 12, weight: .semibold))
+                                        .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(.secondary)
                         
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) {
@@ -5892,8 +5904,8 @@ struct AddRuleSheet: View {
                     Image(systemName: "plus.circle.fill")
                     Text("Create Rule")
                         .font(.system(size: 15, weight: .bold))
-                }
-                .foregroundColor(.white)
+                                }
+                                .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(
@@ -5904,8 +5916,8 @@ struct AddRuleSheet: View {
                     )
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(.plain)
+                            }
+                            .buttonStyle(.plain)
             .disabled(title.isEmpty)
             .padding(20)
         }
@@ -5937,9 +5949,9 @@ struct AddRuleWindowContent: View {
                 Text("New Rule")
                     .font(.system(size: 18, weight: .bold))
                 Spacer()
-                Button {
+                            Button {
                     closeWindow()
-                } label: {
+                            } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 22))
                         .foregroundColor(.secondary)
@@ -5953,7 +5965,7 @@ struct AddRuleWindowContent: View {
                     // Icon picker
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Icon")
-                            .font(.system(size: 12, weight: .semibold))
+                                        .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(.secondary)
                         
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) {
@@ -6113,7 +6125,7 @@ struct AddRuleWindowContent: View {
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(
+        .background(
                     LinearGradient(
                         colors: title.isEmpty ? [Color.gray] : [selectedColor, selectedColor.opacity(0.8)],
                         startPoint: .leading,
