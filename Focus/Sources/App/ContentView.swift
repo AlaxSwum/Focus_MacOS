@@ -4866,6 +4866,8 @@ struct AddMeetingSheet: View {
     @State private var projectMembers: [ProjectMember] = []
     @State private var isLoadingProjects = true
     @State private var isLoadingMembers = false
+    @State private var errorMessage: String?
+    @State private var showError = false
     
     private let supabaseURL = "https://bayyefskgflbyyuwrlgm.supabase.co"
     private let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJheXllZnNrZ2ZsYnl5dXdybGdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAyNTg0MzAsImV4cCI6MjA2NTgzNDQzMH0.eTr2bOWOO7N7hzRR45qapeQ6V-u2bgV5BbQygZZgGGM"
@@ -5373,6 +5375,11 @@ struct AddMeetingSheet: View {
                 projectMembers = []
             }
         }
+        .alert("Error", isPresented: $showError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "An error occurred")
+        }
     }
     
     private func fetchProjects() {
@@ -5560,25 +5567,49 @@ struct AddMeetingSheet: View {
     }
     
     private func saveMeeting() {
-        guard let userId = authManager.currentUser?.id else { return }
+        // Validate user is logged in
+        guard let userId = authManager.currentUser?.id else { 
+            errorMessage = "You must be logged in to create a meeting"
+            showError = true
+            print("ERROR: User not logged in - currentUser is nil")
+            return 
+        }
+        
+        print("DEBUG: Creating meeting with userId: \(userId)")
         
         // Project is required - validate before saving
         guard selectedProject > 0 else {
+            errorMessage = "Please select a project for this meeting"
+            showError = true
             print("ERROR: Project is required to create a meeting")
+            return
+        }
+        
+        // Validate title
+        guard !title.trimmingCharacters(in: .whitespaces).isEmpty else {
+            errorMessage = "Please enter a meeting title"
+            showError = true
             return
         }
         
         isSaving = true
         
         Task {
-            await createMeeting(userId: userId)
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            await taskManager.fetchTasks(for: userId)
-            await MainActor.run { dismiss() }
+            let success = await createMeeting(userId: userId)
+            if success {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                await taskManager.fetchTasks(for: userId)
+                await MainActor.run { dismiss() }
+            } else {
+                await MainActor.run { 
+                    isSaving = false
+                    showError = true 
+                }
+            }
         }
     }
     
-    private func createMeeting(userId: Int) async {
+    private func createMeeting(userId: Int) async -> Bool {
         // Match website's meeting creation format exactly
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
@@ -5608,7 +5639,10 @@ struct AddMeetingSheet: View {
             "updated_at": nowStr
         ]
         
-        guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting") else { return }
+        guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting") else { 
+            await MainActor.run { errorMessage = "Invalid API URL" }
+            return false 
+        }
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -5620,6 +5654,7 @@ struct AddMeetingSheet: View {
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: meetingData)
             print("DEBUG: Creating meeting with data: \(meetingData)")
+            print("DEBUG: User ID being used: \(userId)")
             
             let (data, response) = try await URLSession.shared.data(for: request)
             
@@ -5630,12 +5665,23 @@ struct AddMeetingSheet: View {
                 }
                 if httpResponse.statusCode == 201 || httpResponse.statusCode == 200 {
                     print("DEBUG: Meeting created successfully!")
+                    return true
                 } else {
-                    print("DEBUG: Meeting creation may have failed with status: \(httpResponse.statusCode)")
+                    // Parse error from response
+                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let message = json["message"] as? String {
+                        await MainActor.run { errorMessage = "Server error: \(message)" }
+                    } else {
+                        await MainActor.run { errorMessage = "Failed to create meeting (status: \(httpResponse.statusCode))" }
+                    }
+                    return false
                 }
             }
+            return false
         } catch {
             print("Failed to save meeting: \(error)")
+            await MainActor.run { errorMessage = "Network error: \(error.localizedDescription)" }
+            return false
         }
     }
 }

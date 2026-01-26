@@ -12,16 +12,22 @@ import SwiftUI
 struct User: Codable, Identifiable {
     let id: Int
     var email: String
-    var fullName: String?
-    var avatarUrl: String?
-    var createdAt: Date?
+    var name: String?           // matches auth_user.name
+    var role: String?           // matches auth_user.role  
+    var position: String?       // matches auth_user.position
+    var phone: String?          // matches auth_user.phone
+    var isActive: Bool?         // matches auth_user.is_active
+    var dateJoined: String?     // matches auth_user.date_joined
     
     enum CodingKeys: String, CodingKey {
         case id
         case email
-        case fullName = "full_name"
-        case avatarUrl = "avatar_url"
-        case createdAt = "created_at"
+        case name
+        case role
+        case position
+        case phone
+        case isActive = "is_active"
+        case dateJoined = "date_joined"
     }
 }
 

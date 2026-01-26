@@ -167,14 +167,14 @@ struct SettingsView: View {
                     )
                     .frame(width: 56, height: 56)
                 
-                Text(initials(from: user.fullName ?? user.email))
+                Text(initials(from: user.name ?? user.email))
                     .font(.title3)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
             }
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(user.fullName ?? "User")
+                Text(user.name ?? "User")
                     .font(.headline)
                 Text(user.email)
                     .font(.caption)
