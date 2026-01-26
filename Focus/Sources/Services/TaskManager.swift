@@ -378,13 +378,13 @@ class TaskManager: ObservableObject {
                     let inDateRange = meetingDate >= monthAgo && meetingDate <= futureDate
                     
                     // Check user access: user created it OR user is in attendees
-                    // (Same logic as website - no fallback for legacy meetings)
-                    let isCreator = meeting.userId == userId
+                    // Check both created_by_id (new) and user_id (legacy)
+                    let isCreator = (meeting.createdById == userId) || (meeting.userId == userId)
                     let isAttendee = meeting.attendeeIds?.contains(userId) ?? false
                     let hasAccess = isCreator || isAttendee
                     
                     if hasAccess {
-                        print("Meeting '\(meeting.title)' - isCreator: \(isCreator), isAttendee: \(isAttendee)")
+                        print("Meeting '\(meeting.title)' - isCreator: \(isCreator) (createdById: \(meeting.createdById ?? -1), userId: \(meeting.userId ?? -1)), isAttendee: \(isAttendee)")
                     }
                     
                     return inDateRange && hasAccess
@@ -422,6 +422,7 @@ class TaskManager: ObservableObject {
                                 location: item["location"] as? String,
                                 isCompleted: item["completed"] as? Bool,
                                 userId: item["user_id"] as? Int,
+                                createdById: item["created_by_id"] as? Int,
                                 endTime_db: item["end_time"] as? String,
                                 createdAt: item["created_at"] as? String,
                                 updatedAt: item["updated_at"] as? String,
@@ -445,8 +446,8 @@ class TaskManager: ObservableObject {
                         let inDateRange = meetingDate >= monthAgo && meetingDate <= futureDate
                         
                         // Check user access: user created it OR user is in attendees
-                        // (Same logic as website - no fallback for legacy meetings)
-                        let isCreator = meeting.userId == userId
+                        // Check both created_by_id (new) and user_id (legacy)
+                        let isCreator = (meeting.createdById == userId) || (meeting.userId == userId)
                         let isAttendee = meeting.attendeeIds?.contains(userId) ?? false
                         let hasAccess = isCreator || isAttendee
                         

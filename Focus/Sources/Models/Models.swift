@@ -184,7 +184,8 @@ struct Meeting: Codable, Identifiable, Hashable {
     var notes: String?
     var location: String?
     var isCompleted: Bool?
-    var userId: Int?
+    var userId: Int?           // Legacy field
+    var createdById: Int?      // New field - matches created_by_id in database
     var endTime_db: String?  // From database if exists
     var createdAt: String?
     var updatedAt: String?
@@ -207,6 +208,7 @@ struct Meeting: Codable, Identifiable, Hashable {
         case location
         case isCompleted = "completed"
         case userId = "user_id"
+        case createdById = "created_by_id"
         case endTime_db = "end_time"
         case createdAt = "created_at"
         case updatedAt = "updated_at"

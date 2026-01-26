@@ -4272,16 +4272,16 @@ struct FullAppWindowView: View {
                 let titles = ["Personal", "To Do", "Meetings", "Rule Book", "Journal"]
                 let icons = ["calendar", "checklist", "video.fill", "book.closed.fill", "book.pages.fill"]
                 let colors: [Color] = [.blue, .green, .purple, .orange, .pink]
-                
-                Button {
+                    
+                    Button {
                     withAnimation(.spring(response: 0.3)) {
-                        selectedTab = index
-                    }
-                } label: {
+                            selectedTab = index
+                        }
+                    } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: icons[index])
+                            Image(systemName: icons[index])
                             .font(.system(size: 14, weight: .semibold))
-                        Text(titles[index])
+                            Text(titles[index])
                             .font(.system(size: 14, weight: .semibold))
                     }
                     .foregroundColor(selectedTab == index ? .white : .primary)
@@ -4291,9 +4291,9 @@ struct FullAppWindowView: View {
                         RoundedRectangle(cornerRadius: 10)
                             .fill(selectedTab == index ? colors[index] : Color.clear)
                     )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-            }
             
             Spacer()
         }
