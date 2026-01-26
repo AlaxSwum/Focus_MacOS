@@ -4285,11 +4285,13 @@ struct FullAppWindowView: View {
     
     // Simple, always-visible navigation tabs
     private var navigationTabs: some View {
-        HStack(spacing: 6) {
-            // Tab buttons
-            ForEach(0..<5, id: \.self) { index in
-                tabButton(index: index)
-            }
+        HStack(spacing: 8) {
+            // Tab buttons with explicit colors
+            tabButton(index: 0, title: "Personal", icon: "calendar", color: .blue)
+            tabButton(index: 1, title: "To Do", icon: "checklist", color: .green)
+            tabButton(index: 2, title: "Meetings", icon: "video.fill", color: .purple)
+            tabButton(index: 3, title: "Rule Book", icon: "book.closed.fill", color: .orange)
+            tabButton(index: 4, title: "Journal", icon: "book.pages.fill", color: .pink)
             
             Spacer()
             
@@ -4301,45 +4303,43 @@ struct FullAppWindowView: View {
                         .frame(width: 8, height: 8)
                     Text(user.name ?? user.email)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.primary)
+                        .foregroundColor(.white)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Color.gray.opacity(0.1))
+                .background(Color.white.opacity(0.1))
                 .clipShape(Capsule())
             }
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 8)
-        .background(Color(nsColor: NSColor.windowBackgroundColor))
+        .padding(.vertical, 10)
+        .background(
+            LinearGradient(
+                colors: [Color(red: 0.15, green: 0.15, blue: 0.18), Color(red: 0.12, green: 0.12, blue: 0.15)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
     }
     
-    private func tabButton(index: Int) -> some View {
-        let titles = ["Personal", "To Do", "Meetings", "Rule Book", "Journal"]
-        let icons = ["calendar", "checklist", "video.fill", "book.closed.fill", "book.pages.fill"]
-        let colors: [Color] = [.blue, .green, .purple, .orange, .pink]
-        
-        return Button {
+    private func tabButton(index: Int, title: String, icon: String, color: Color) -> some View {
+        Button {
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedTab = index
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: icons[index])
+                Image(systemName: icon)
                     .font(.system(size: 14, weight: .semibold))
-                Text(titles[index])
+                Text(title)
                     .font(.system(size: 14, weight: .semibold))
             }
-            .foregroundColor(selectedTab == index ? .white : .primary.opacity(0.8))
+            .foregroundColor(selectedTab == index ? .white : .white.opacity(0.7))
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(selectedTab == index ? colors[index] : Color.gray.opacity(0.15))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(selectedTab == index ? colors[index].opacity(0.5) : Color.clear, lineWidth: 2)
+                    .fill(selectedTab == index ? color : Color.white.opacity(0.1))
             )
         }
         .buttonStyle(.plain)
