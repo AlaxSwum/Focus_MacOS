@@ -4248,98 +4248,111 @@ struct FullAppWindowView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var taskManager: TaskManager
     @State private var selectedTab = 2  // Start on Meetings tab
-    
-    private let tabHeight: CGFloat = 56
 
     var body: some View {
-        ZStack(alignment: .top) {
-            if authManager.isAuthenticated {
-                // Content area with top padding for tabs
-                VStack(spacing: 0) {
-                    // Spacer for tab bar
-                    Color.clear
-                        .frame(height: tabHeight + 1)
-                    
-                    // Content based on selected tab
-                    contentForTab
-                }
+        if authManager.isAuthenticated {
+            HStack(spacing: 0) {
+                // LEFT SIDEBAR - Navigation
+                sidebarNavigation
+                    .frame(width: 200)
                 
-                // NAVIGATION TABS - Always on top as overlay
-                VStack(spacing: 0) {
-                    navigationTabs
-                        .frame(height: tabHeight)
-                    
-                    // Divider line
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.5))
-                        .frame(height: 1)
-                }
-            } else {
-                LoginView()
-                    .environmentObject(authManager)
+                // Divider
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 1)
+                
+                // MAIN CONTENT
+                contentForTab
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(minWidth: 1200, minHeight: 800)
+            .background(Color(nsColor: NSColor.windowBackgroundColor))
+        } else {
+            LoginView()
+                .environmentObject(authManager)
+                .frame(minWidth: 1200, minHeight: 800)
         }
-        .frame(minWidth: 1200, minHeight: 800)
-        .background(Color(nsColor: NSColor.windowBackgroundColor))
     }
     
-    // Simple, always-visible navigation tabs
-    private var navigationTabs: some View {
-        HStack(spacing: 8) {
-            // Tab buttons with explicit colors
-            tabButton(index: 0, title: "Personal", icon: "calendar", color: .blue)
-            tabButton(index: 1, title: "To Do", icon: "checklist", color: .green)
-            tabButton(index: 2, title: "Meetings", icon: "video.fill", color: .purple)
-            tabButton(index: 3, title: "Rule Book", icon: "book.closed.fill", color: .orange)
-            tabButton(index: 4, title: "Journal", icon: "book.pages.fill", color: .pink)
+    // Sidebar navigation
+    private var sidebarNavigation: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // App Header
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.blue)
+                Text("Focus")
+                    .font(.system(size: 20, weight: .bold))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 20)
+            
+            Divider()
+                .padding(.bottom, 12)
+            
+            // Navigation Items
+            VStack(spacing: 4) {
+                sidebarItem(index: 0, title: "Personal", icon: "calendar", color: .blue)
+                sidebarItem(index: 1, title: "To Do", icon: "checklist", color: .green)
+                sidebarItem(index: 2, title: "Meetings", icon: "video.fill", color: .purple)
+                sidebarItem(index: 3, title: "Rule Book", icon: "book.closed.fill", color: .orange)
+                sidebarItem(index: 4, title: "Journal", icon: "book.pages.fill", color: .pink)
+            }
+            .padding(.horizontal, 12)
             
             Spacer()
             
-            // User info on right
+            // User info at bottom
             if let user = authManager.currentUser {
-                HStack(spacing: 8) {
+                Divider()
+                    .padding(.top, 12)
+                
+                HStack(spacing: 10) {
                     Circle()
                         .fill(Color.green)
-                        .frame(width: 8, height: 8)
-                    Text(user.name ?? user.email)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white)
+                        .frame(width: 10, height: 10)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(user.name ?? "User")
+                            .font(.system(size: 13, weight: .medium))
+                            .lineLimit(1)
+                        Text(user.email)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.1))
-                .clipShape(Capsule())
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(
-            LinearGradient(
-                colors: [Color(red: 0.15, green: 0.15, blue: 0.18), Color(red: 0.12, green: 0.12, blue: 0.15)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .background(Color(nsColor: NSColor.controlBackgroundColor))
     }
     
-    private func tabButton(index: Int, title: String, icon: String, color: Color) -> some View {
+    private func sidebarItem(index: Int, title: String, icon: String, color: Color) -> some View {
         Button {
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedTab = index
             }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 16))
+                    .foregroundColor(selectedTab == index ? .white : color)
+                    .frame(width: 24)
+                
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 14, weight: selectedTab == index ? .semibold : .medium))
+                    .foregroundColor(selectedTab == index ? .white : .primary)
+                
+                Spacer()
             }
-            .foregroundColor(selectedTab == index ? .white : .white.opacity(0.7))
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(selectedTab == index ? color : Color.white.opacity(0.1))
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(selectedTab == index ? color : Color.clear)
             )
         }
         .buttonStyle(.plain)

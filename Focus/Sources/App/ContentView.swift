@@ -970,25 +970,25 @@ struct FullCalendarView: View {
     @State private var showAddTask = false
     @State private var showAddTodo = false
     @State private var taskToEdit: TaskItem?
-
+    
     // Drag to create (day view)
     @State private var isDragging = false
     @State private var dragStartY: CGFloat = 0
     @State private var dragCurrentY: CGFloat = 0
     @State private var dragStartTime: Date?
     @State private var dragEndTime: Date?
-
+    
     // Drag to create (week view)
     @State private var weekDragDay: Date?
     @State private var weekDragStartY: CGFloat = 0
     @State private var weekDragCurrentY: CGFloat = 0
     @State private var isWeekDragging = false
-
+    
     // Resize task
     @State private var resizingTaskId: String?
     @State private var resizeStartHeight: CGFloat = 0
     @State private var resizeDelta: CGFloat = 0
-
+    
     enum CalendarViewMode: String, CaseIterable {
         case day = "Day"
         case week = "Week"
@@ -1000,7 +1000,7 @@ struct FullCalendarView: View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
                 dateNavigation
-
+                
                 if viewMode == .day {
                     dayView
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1263,9 +1263,9 @@ struct FullCalendarView: View {
                                         ForEach(0..<24, id: \.self) { _ in
                                             ZStack(alignment: .top) {
                                                 // Main hour line
-                                                Rectangle()
+                                            Rectangle()
                                                     .fill(Color.gray.opacity(0.25))
-                                                    .frame(height: 1)
+                                                .frame(height: 1)
                                                 
                                                 // 15-minute line
                                                 Rectangle()
@@ -1285,7 +1285,7 @@ struct FullCalendarView: View {
                                                     .frame(height: 1)
                                                     .offset(y: hourHeight * 0.75)
                                             }
-                                            .frame(height: hourHeight, alignment: .top)
+                                                .frame(height: hourHeight, alignment: .top)
                                         }
                                     }
                                     
@@ -1504,10 +1504,10 @@ struct FullCalendarView: View {
                         .offset(y: hourHeight * 0.25)
                     
                     // 30-minute line (medium)
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(height: 1)
-                        .frame(maxWidth: .infinity)
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(height: 1)
+                    .frame(maxWidth: .infinity)
                         .offset(y: hourHeight * 0.5)
                     
                     // 45-minute line (dotted/light)
@@ -1517,8 +1517,8 @@ struct FullCalendarView: View {
                         .frame(maxWidth: .infinity)
                         .offset(y: hourHeight * 0.75)
                 }
-                .frame(height: hourHeight, alignment: .top)
-                .id(hour)
+                    .frame(height: hourHeight, alignment: .top)
+                    .id(hour)
             }
         }
     }
@@ -2617,8 +2617,8 @@ struct ResizableTaskBlock: View {
                 }
                 
                 // Normal background
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(task.type.color.opacity(task.isCompleted ? 0.1 : 0.15))
+            RoundedRectangle(cornerRadius: 6)
+                .fill(task.type.color.opacity(task.isCompleted ? 0.1 : 0.15))
                     .offset(x: slideOffset)
                     .opacity(completionOpacity)
             }
@@ -2765,8 +2765,8 @@ struct WeekTaskBlock: View {
                     // While dragging - show full time range and duration
                     VStack(alignment: .leading, spacing: 1) {
                         Text(getDragPreviewTimeRange())
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(task.type.color)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(task.type.color)
                         Text(getDragPreviewDuration())
                             .font(.system(size: 8, weight: .medium))
                             .foregroundColor(task.type.color.opacity(0.8))
@@ -2782,20 +2782,20 @@ struct WeekTaskBlock: View {
                             .foregroundColor(.orange)
                         }
                     }
-                    .padding(.horizontal, 3)
-                    .padding(.vertical, 2)
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 2)
                 } else if isResizing {
                     // While resizing - show end time and new duration
                     VStack(alignment: .leading, spacing: 1) {
                         Text(getResizePreviewTimeRange())
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(task.type.color)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(task.type.color)
                         Text(getResizePreviewDuration())
                             .font(.system(size: 8, weight: .medium))
                             .foregroundColor(task.type.color.opacity(0.8))
                     }
-                    .padding(.horizontal, 3)
-                    .padding(.vertical, 2)
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 2)
                 } else {
                     // Normal display - show title, time range, and duration
                     VStack(alignment: .leading, spacing: 1) {
@@ -2804,13 +2804,13 @@ struct WeekTaskBlock: View {
                             .foregroundColor(task.isCompleted ? .secondary : .primary)
                             .lineLimit(1)
                         // Always show time and duration
-                        HStack(spacing: 4) {
-                            Text(task.timeText)
-                                .font(.system(size: 7))
-                                .foregroundColor(.secondary)
+                            HStack(spacing: 4) {
+                                Text(task.timeText)
+                                    .font(.system(size: 7))
+                                    .foregroundColor(.secondary)
                             Text("• \(getTaskDuration())")
                                 .font(.system(size: 7, weight: .medium))
-                                .foregroundColor(task.type.color)
+                                        .foregroundColor(task.type.color)
                         }
                     }
                     .padding(.horizontal, 3)
@@ -2831,9 +2831,9 @@ struct WeekTaskBlock: View {
                         }
                         
                         if hasMoved {
-                            withAnimation(.interactiveSpring()) {
-                                isDragging = true
-                                dragOffset = value.translation.height
+                        withAnimation(.interactiveSpring()) {
+                            isDragging = true
+                            dragOffset = value.translation.height
                                 horizontalOffset = value.translation.width
                             }
                         }
@@ -3040,7 +3040,7 @@ struct TaskPopupView: View {
                     if task.isRecurring {
                         showRecurringDeleteOptions = true
                     } else {
-                        showDeleteConfirm = true
+                    showDeleteConfirm = true
                     }
                 } label: {
                     if isDeleting {
@@ -3697,15 +3697,15 @@ struct FullMeetingsView: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            headerSection
-            
-            // Stats bar
-            statsBar
-            
-            // Month Calendar View - fills remaining space
-            monthCalendarView
+            VStack(spacing: 0) {
+                // Header
+                headerSection
+                
+                // Stats bar
+                statsBar
+                
+                // Month Calendar View - fills remaining space
+                monthCalendarView
         }
         .sheet(isPresented: $showMeetingPopup) {
             if let meeting = selectedMeeting {
@@ -4748,13 +4748,13 @@ struct MeetingPopupView: View {
                 print("DELETE: Invalid URL")
                 return
             }
-            
-            var request = URLRequest(url: url)
-            request.httpMethod = "DELETE"
-            request.setValue(supabaseKey, forHTTPHeaderField: "apikey")
-            request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
-            
-            do {
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue(supabaseKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(supabaseKey)", forHTTPHeaderField: "Authorization")
+        
+        do {
                 let (data, response) = try await URLSession.shared.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse {
                     print("DELETE Response status: \(httpResponse.statusCode)")
@@ -4765,9 +4765,9 @@ struct MeetingPopupView: View {
                         print("DELETE Error response: \(responseStr)")
                     }
                 }
-            } catch {
-                print("Failed to delete meeting: \(error)")
-            }
+        } catch {
+            print("Failed to delete meeting: \(error)")
+        }
         } else {
             // Attendee: Remove self from attendee list
             let newAttendees = meetingAttendeeIds.filter { $0 != userId }
@@ -5593,9 +5593,9 @@ struct AddMeetingSheet: View {
         Task {
             let success = await createMeeting(userId: userId)
             if success {
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                await taskManager.fetchTasks(for: userId)
-                await MainActor.run { dismiss() }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await taskManager.fetchTasks(for: userId)
+            await MainActor.run { dismiss() }
             } else {
                 await MainActor.run { 
                     isSaving = false
