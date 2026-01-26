@@ -4250,62 +4250,86 @@ struct FullAppWindowView: View {
     @State private var selectedTab = 0
 
     var body: some View {
-        VStack(spacing: 0) {
-            if authManager.isAuthenticated {
-                // NAVIGATION TABS - Always visible at top
-                navigationTabs
-                
-                // Content based on selected tab
-                contentForTab
-            } else {
-                LoginView()
-                    .environmentObject(authManager)
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                if authManager.isAuthenticated {
+                    // NAVIGATION TABS - Fixed at top with guaranteed height
+                    navigationTabs
+                        .frame(height: 60)
+                        .frame(maxWidth: .infinity)
+                    
+                    // Divider line
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(height: 1)
+                    
+                    // Content based on selected tab - fills remaining space
+                    contentForTab
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    LoginView()
+                        .environmentObject(authManager)
+                }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .background(Color(nsColor: NSColor.windowBackgroundColor))
     }
     
-    // Simple, always-visible navigation tabs
+    // Simple, always-visible navigation tabs with fixed height
     private var navigationTabs: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 4) {
+            // Tab buttons
             ForEach(0..<5, id: \.self) { index in
-                let titles = ["Personal", "To Do", "Meetings", "Rule Book", "Journal"]
-                let icons = ["calendar", "checklist", "video.fill", "book.closed.fill", "book.pages.fill"]
-                let colors: [Color] = [.blue, .green, .purple, .orange, .pink]
-                    
-                    Button {
-                    withAnimation(.spring(response: 0.3)) {
-                            selectedTab = index
-                        }
-                    } label: {
-                    HStack(spacing: 8) {
-                            Image(systemName: icons[index])
-                            .font(.system(size: 14, weight: .semibold))
-                            Text(titles[index])
-                            .font(.system(size: 14, weight: .semibold))
-                    }
-                    .foregroundColor(selectedTab == index ? .white : .primary)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(selectedTab == index ? colors[index] : Color.clear)
-                    )
-                    }
-                    .buttonStyle(.plain)
-                }
+                tabButton(index: index)
+            }
             
             Spacer()
+            
+            // User info on right
+            if let user = authManager.currentUser {
+                HStack(spacing: 8) {
+                    Text(user.name ?? user.email)
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 8, height: 8)
+                }
+                .padding(.trailing, 8)
+            }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background(Color(nsColor: NSColor.controlBackgroundColor))
-        .overlay(
-            Rectangle()
-                .fill(Color(nsColor: NSColor.separatorColor))
-                .frame(height: 1),
-            alignment: .bottom
-        )
+    }
+    
+    private func tabButton(index: Int) -> some View {
+        let titles = ["Personal", "To Do", "Meetings", "Rule Book", "Journal"]
+        let icons = ["calendar", "checklist", "video.fill", "book.closed.fill", "book.pages.fill"]
+        let colors: [Color] = [.blue, .green, .purple, .orange, .pink]
+        
+        return Button {
+            withAnimation(.spring(response: 0.3)) {
+                selectedTab = index
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icons[index])
+                    .font(.system(size: 13, weight: .semibold))
+                Text(titles[index])
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundColor(selectedTab == index ? .white : .primary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(selectedTab == index ? colors[index] : Color.gray.opacity(0.1))
+            )
+        }
+        .buttonStyle(.plain)
     }
     
     @ViewBuilder
