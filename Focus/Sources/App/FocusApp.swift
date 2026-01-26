@@ -4247,38 +4247,45 @@ struct FlowLayout: Layout {
 struct FullAppWindowView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var taskManager: TaskManager
-    @State private var selectedTab = 0
+    @State private var selectedTab = 2  // Start on Meetings tab
+    
+    private let tabHeight: CGFloat = 56
 
     var body: some View {
-        GeometryReader { geometry in
-            VStack(spacing: 0) {
-                if authManager.isAuthenticated {
-                    // NAVIGATION TABS - Fixed at top with guaranteed height
+        ZStack(alignment: .top) {
+            if authManager.isAuthenticated {
+                // Content area with top padding for tabs
+                VStack(spacing: 0) {
+                    // Spacer for tab bar
+                    Color.clear
+                        .frame(height: tabHeight + 1)
+                    
+                    // Content based on selected tab
+                    contentForTab
+                }
+                
+                // NAVIGATION TABS - Always on top as overlay
+                VStack(spacing: 0) {
                     navigationTabs
-                        .frame(height: 60)
-                        .frame(maxWidth: .infinity)
+                        .frame(height: tabHeight)
                     
                     // Divider line
                     Rectangle()
-                        .fill(Color.gray.opacity(0.3))
+                        .fill(Color.gray.opacity(0.5))
                         .frame(height: 1)
-                    
-                    // Content based on selected tab - fills remaining space
-                    contentForTab
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    LoginView()
-                        .environmentObject(authManager)
                 }
+            } else {
+                LoginView()
+                    .environmentObject(authManager)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .frame(minWidth: 1200, minHeight: 800)
         .background(Color(nsColor: NSColor.windowBackgroundColor))
     }
     
-    // Simple, always-visible navigation tabs with fixed height
+    // Simple, always-visible navigation tabs
     private var navigationTabs: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             // Tab buttons
             ForEach(0..<5, id: \.self) { index in
                 tabButton(index: index)
@@ -4289,20 +4296,22 @@ struct FullAppWindowView: View {
             // User info on right
             if let user = authManager.currentUser {
                 HStack(spacing: 8) {
-                    Text(user.name ?? user.email)
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                    
                     Circle()
                         .fill(Color.green)
                         .frame(width: 8, height: 8)
+                    Text(user.name ?? user.email)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.primary)
                 }
-                .padding(.trailing, 8)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.gray.opacity(0.1))
+                .clipShape(Capsule())
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color(nsColor: NSColor.controlBackgroundColor))
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: NSColor.windowBackgroundColor))
     }
     
     private func tabButton(index: Int) -> some View {
@@ -4311,22 +4320,26 @@ struct FullAppWindowView: View {
         let colors: [Color] = [.blue, .green, .purple, .orange, .pink]
         
         return Button {
-            withAnimation(.spring(response: 0.3)) {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 selectedTab = index
             }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: icons[index])
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                 Text(titles[index])
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
             }
-            .foregroundColor(selectedTab == index ? .white : .primary)
-            .padding(.horizontal, 16)
+            .foregroundColor(selectedTab == index ? .white : .primary.opacity(0.8))
+            .padding(.horizontal, 18)
             .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(selectedTab == index ? colors[index] : Color.gray.opacity(0.1))
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(selectedTab == index ? colors[index] : Color.gray.opacity(0.15))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(selectedTab == index ? colors[index].opacity(0.5) : Color.clear, lineWidth: 2)
             )
         }
         .buttonStyle(.plain)

@@ -3697,19 +3697,15 @@ struct FullMeetingsView: View {
     }
     
     var body: some View {
-        GeometryReader { geometry in
-            VStack(spacing: 0) {
-                // Header
-                headerSection
-                
-                // Stats bar
-                statsBar
-                
-                // Month Calendar View - fills remaining space
-                monthCalendarView
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .frame(width: geometry.size.width, height: geometry.size.height)
+        VStack(spacing: 0) {
+            // Header
+            headerSection
+            
+            // Stats bar
+            statsBar
+            
+            // Month Calendar View - fills remaining space
+            monthCalendarView
         }
         .sheet(isPresented: $showMeetingPopup) {
             if let meeting = selectedMeeting {
