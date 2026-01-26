@@ -4470,6 +4470,7 @@ struct FullAppWindowView: View {
             alignment: .bottom
         )
         .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+        .frame(height: 60)  // Fixed height to ensure visibility
     }
     
     @State private var hoveredTab: Int? = nil
