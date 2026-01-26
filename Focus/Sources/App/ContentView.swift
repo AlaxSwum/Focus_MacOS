@@ -5561,6 +5561,13 @@ struct AddMeetingSheet: View {
     
     private func saveMeeting() {
         guard let userId = authManager.currentUser?.id else { return }
+        
+        // Project is required - validate before saving
+        guard selectedProject > 0 else {
+            print("ERROR: Project is required to create a meeting")
+            return
+        }
+        
         isSaving = true
         
         Task {
@@ -5588,9 +5595,11 @@ struct AddMeetingSheet: View {
         let nowStr = isoFormatter.string(from: now)
         
         // Website uses these exact fields - matching supabase.js createMeeting function
-        var meetingData: [String: Any] = [
+        // project_id is REQUIRED by the database (NOT NULL constraint)
+        let meetingData: [String: Any] = [
             "title": title,
             "description": description,
+            "project_id": selectedProject,  // REQUIRED - must be selected
             "date": dateFormatter.string(from: meetingDate),
             "time": startTimeStr,
             "duration": duration,
@@ -5598,14 +5607,6 @@ struct AddMeetingSheet: View {
             "created_at": nowStr,
             "updated_at": nowStr
         ]
-        
-        // Project ID - website uses "project_id" field
-        if selectedProject > 0 {
-            meetingData["project_id"] = selectedProject
-        }
-        
-        // Attendee IDs - website uses attendee_ids as integer array
-        // For now, we don't have attendee selection UI, so skip this
         
         guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting") else { return }
         
