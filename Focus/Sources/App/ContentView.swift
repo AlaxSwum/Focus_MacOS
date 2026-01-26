@@ -254,6 +254,14 @@ struct FullAppView: View {
                     FullMeetingsView()
                         .environmentObject(taskManager)
                         .environmentObject(authManager)
+                case 3:
+                    FullRuleBookView()
+                        .environmentObject(taskManager)
+                        .environmentObject(authManager)
+                case 4:
+                    FullJournalView()
+                        .environmentObject(taskManager)
+                        .environmentObject(authManager)
                 default:
                     FullCalendarView()
                         .environmentObject(taskManager)
@@ -340,24 +348,24 @@ struct FullAppView: View {
                     .fill(Color(nsColor: NSColor.controlBackgroundColor))
                 
                 HStack(spacing: 0) {
-                    ForEach(0..<3, id: \.self) { index in
-                        let titles = ["Personal", "Todo List", "Meetings"]
-                        let icons = ["calendar", "checklist", "person.2"]
+                    ForEach(0..<5, id: \.self) { index in
+                        let titles = ["Personal", "Todo", "Meetings", "Rule Book", "Journal"]
+                        let icons = ["calendar", "checklist", "person.2", "book.closed.fill", "book.pages"]
                         
                         Button {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 selectedTab = index
                             }
                         } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 5) {
                                 Image(systemName: icons[index])
-                                    .font(.system(size: 12))
+                                    .font(.system(size: 11))
                                 Text(titles[index])
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(.system(size: 12, weight: .medium))
                             }
                             .foregroundColor(selectedTab == index ? .primary : .secondary)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
                             .background(
                                 Group {
                                     if selectedTab == index {
@@ -5567,6 +5575,9 @@ struct AddMeetingSheet: View {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
         let calendar = Calendar.current
         let hour = calendar.component(.hour, from: meetingTime)
         let minute = calendar.component(.minute, from: meetingTime)
@@ -5578,14 +5589,20 @@ struct AddMeetingSheet: View {
         let endMin = endMinutes % 60
         let endTimeStr = String(format: "%02d:%02d:00", endHour, endMin)
         
+        let now = Date()
+        let nowStr = isoFormatter.string(from: now)
+        
         var meetingData: [String: Any] = [
             "user_id": userId,
+            "created_by_id": userId,
             "title": title,
             "date": dateFormatter.string(from: meetingDate),
             "time": startTimeStr,
             "end_time": endTimeStr,
             "duration": duration,
-            "completed": false
+            "completed": false,
+            "created_at": nowStr,
+            "updated_at": nowStr
         ]
         
         if !description.isEmpty { meetingData["description"] = description }
