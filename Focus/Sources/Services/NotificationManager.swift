@@ -433,14 +433,14 @@ class InAppNotificationManager: ObservableObject {
     
     private var dismissTimers: [UUID: Timer] = [:]
     
-    func show(_ notification: NotificationData, autoDismissAfter seconds: Double = 10) {
+    func show(_ notification: NotificationData, autoDismissAfter seconds: Double = 60) {
         // Limit to 3 notifications
         if activeNotifications.count >= 3 {
             activeNotifications.removeFirst()
         }
         activeNotifications.append(notification)
         
-        // Auto dismiss timer
+        // Auto dismiss timer - defaults to 60 seconds (1 minute)
         let timer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 self?.dismiss(notification)
