@@ -2129,14 +2129,14 @@ extension MenuBarDropdownView {
 
         let hostingController = NSHostingController(rootView: contentView)
 
-        // Create floating window that stays above all apps
+        // Create floating window that stays above ALL apps including full-screen
         let window = FloatingAppWindow(contentViewController: hostingController)
         window.title = "Add Todo"
         window.styleMask = [.titled, .closable]
         window.setContentSize(NSSize(width: 400, height: 520))
         window.center()
-        window.level = .floating
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.level = .screenSaver  // Highest level - appears over full-screen apps
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -2147,14 +2147,14 @@ extension MenuBarDropdownView {
         
         let hostingController = NSHostingController(rootView: contentView)
         
-        // Create floating window that stays above all apps
+        // Create floating window that stays above ALL apps including full-screen
         let window = FloatingAppWindow(contentViewController: hostingController)
         window.title = "Add Rule"
         window.styleMask = [.titled, .closable]
         window.setContentSize(NSSize(width: 400, height: 600))
         window.center()
-        window.level = .floating
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.level = .screenSaver  // Highest level - appears over full-screen apps
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -4397,9 +4397,9 @@ class FloatingAppWindow: NSWindow {
     
     override func makeKeyAndOrderFront(_ sender: Any?) {
         super.makeKeyAndOrderFront(sender)
-        // Set to floating level that appears above full-screen apps
-        self.level = .floating
-        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // Set to screenSaver level - appears above full-screen apps
+        self.level = .screenSaver
+        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
     }
 }
 #endif
@@ -4978,8 +4978,8 @@ class FloatingNotificationManager {
         window.contentView = hostingView
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.level = .popUpMenu  // Higher level to appear above everything
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        window.level = .screenSaver  // Highest level to appear above full-screen apps
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle, .transient]
         window.hasShadow = true
         window.isMovableByWindowBackground = false
         window.hidesOnDeactivate = false
