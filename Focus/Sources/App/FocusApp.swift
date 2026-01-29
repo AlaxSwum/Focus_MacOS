@@ -365,11 +365,12 @@ class JournalManager: ObservableObject {
 
 @main
 struct FocusApp: App {
-    @StateObject private var authManager = AuthManager.shared
-    @StateObject private var taskManager = TaskManager.shared
-    @StateObject private var notificationManager = NotificationManager.shared
-    @StateObject private var themeManager = ThemeManager.shared
-    @StateObject private var inAppNotificationManager = InAppNotificationManager.shared
+    // Use ObservedObject for singletons - they manage their own lifecycle
+    @ObservedObject private var authManager = AuthManager.shared
+    @ObservedObject private var taskManager = TaskManager.shared
+    @ObservedObject private var notificationManager = NotificationManager.shared
+    @ObservedObject private var themeManager = ThemeManager.shared
+    @ObservedObject private var inAppNotificationManager = InAppNotificationManager.shared
     
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -1031,7 +1032,7 @@ struct ProjectNextLogo: View {
 struct MenuBarDropdownView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var taskManager: TaskManager
-    @StateObject var ruleManager = RuleManager.shared
+    @ObservedObject var ruleManager = RuleManager.shared
     @Environment(\.openWindow) private var openWindow
     @State private var selectedTab = 0
     @State private var todaySubTab = 0  // 0 = Upcoming, 1 = Completed
@@ -5025,6 +5026,13 @@ class FloatingNotificationManager {
         self.keepOnTopTimer?.invalidate()
         self.keepOnTopTimer = nil
         
+        // Keep window on top - periodically bring to front (essential for full-screen apps)
+        self.keepOnTopTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let self = self, let panel = self.notificationPanel else { return }
+            panel.level = .screenSaver
+            panel.orderFrontRegardless()
+        }
+        
         // Only add click-to-dismiss for notifications WITHOUT action buttons
         // Task reminders have buttons (Done, Snooze, Skip) so don't auto-dismiss on click
         if !hasActions {
@@ -6066,6 +6074,7 @@ class FocusSessionManager: ObservableObject {
     private var countdownTimer: Timer?
     private var taskCheckTimer: Timer?
     private var countdownWindow: NSWindow?
+    private var countdownKeepOnTopTimer: Timer?
     private var dndWasEnabled = false
     
     init() {
@@ -6303,6 +6312,14 @@ class FocusSessionManager: ObservableObject {
             window.orderFrontRegardless()
             
             self.countdownWindow = window
+            
+            // Keep countdown window on top - essential for full-screen apps
+            self.countdownKeepOnTopTimer?.invalidate()
+            self.countdownKeepOnTopTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                guard let self = self, let window = self.countdownWindow else { return }
+                window.level = .screenSaver
+                window.orderFrontRegardless()
+            }
         }
     }
     
@@ -6312,6 +6329,8 @@ class FocusSessionManager: ObservableObject {
     
     private func hideCountdownWindow() {
         DispatchQueue.main.async {
+            self.countdownKeepOnTopTimer?.invalidate()
+            self.countdownKeepOnTopTimer = nil
             self.countdownWindow?.close()
             self.countdownWindow = nil
         }
@@ -6714,7 +6733,7 @@ class AppMonitor {
 struct ScoreboardView: View {
     @EnvironmentObject var taskManager: TaskManager
     @EnvironmentObject var authManager: AuthManager
-    @StateObject private var stats = FocusStatsManager.shared
+    @ObservedObject private var stats = FocusStatsManager.shared
     @State private var newAllowedApp = ""
     @State private var newAllowedWebsite = ""
     @State private var showAddApp = false
