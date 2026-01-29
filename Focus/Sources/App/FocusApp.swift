@@ -4441,6 +4441,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             FloatingNotificationManager.shared.startTaskMonitoring()
         }
         
+        // Start Focus Session Manager for DND and countdown timer
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+            _ = FocusSessionManager.shared  // Initialize singleton
+        }
+        
         print("Focus app launched")
     }
     
@@ -6042,6 +6047,363 @@ extension Color {
         let b = Int(components[2] * 255)
         return String(format: "#%02X%02X%02X", r, g, b)
         #endif
+    }
+}
+
+// MARK: - Focus Session Manager (DND + Countdown Timer)
+class FocusSessionManager: ObservableObject {
+    static let shared = FocusSessionManager()
+    
+    @Published var activeTask: TaskItem?
+    @Published var timeRemaining: TimeInterval = 0
+    @Published var isSessionActive = false
+    
+    private var countdownTimer: Timer?
+    private var taskCheckTimer: Timer?
+    private var countdownWindow: NSWindow?
+    private var dndWasEnabled = false
+    
+    init() {
+        startTaskMonitoring()
+    }
+    
+    // Start monitoring for active tasks
+    func startTaskMonitoring() {
+        taskCheckTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            self?.checkForActiveTask()
+        }
+        checkForActiveTask()
+    }
+    
+    private func checkForActiveTask() {
+        Task { @MainActor in
+            let tasks = TaskManager.shared.todayTasks
+            let calendar = Calendar.current
+            let now = Date()
+            let currentHour = calendar.component(.hour, from: now)
+            let currentMinute = calendar.component(.minute, from: now)
+            let currentTotalMinutes = currentHour * 60 + currentMinute
+            
+            // Find currently active task (within its time window)
+            for task in tasks {
+                // Only check today's tasks
+                guard calendar.isDate(task.date, inSameDayAs: now) else { continue }
+                guard !task.isCompleted && !task.isSkipped else { continue }
+                
+                let taskStartMinutes = task.startHour * 60 + task.startMinute
+                let taskEndMinutes = task.endHour * 60 + task.endMinute
+                
+                // Check if we're currently within this task's time
+                if currentTotalMinutes >= taskStartMinutes && currentTotalMinutes < taskEndMinutes {
+                    if self.activeTask?.id != task.id {
+                        // New active task
+                        self.startSession(for: task)
+                    }
+                    return
+                }
+            }
+            
+            // No active task - end session if there was one
+            if self.isSessionActive {
+                self.endSession()
+            }
+        }
+    }
+    
+    func startSession(for task: TaskItem) {
+        activeTask = task
+        isSessionActive = true
+        
+        // Calculate time remaining
+        let calendar = Calendar.current
+        let now = Date()
+        let currentHour = calendar.component(.hour, from: now)
+        let currentMinute = calendar.component(.minute, from: now)
+        let currentSecond = calendar.component(.second, from: now)
+        
+        let currentTotalSeconds = currentHour * 3600 + currentMinute * 60 + currentSecond
+        let taskEndSeconds = task.endHour * 3600 + task.endMinute * 60
+        
+        timeRemaining = TimeInterval(taskEndSeconds - currentTotalSeconds)
+        
+        // Enable DND if this is a Focus-type task
+        if case .timeBlock(let blockType) = task.type, blockType == .focus {
+            enableDND()
+        }
+        
+        // Show countdown window
+        showCountdownWindow()
+        
+        // Start countdown timer
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.updateCountdown()
+        }
+        
+        print("DEBUG: Started focus session for '\(task.title)' - \(Int(timeRemaining / 60)) minutes remaining")
+    }
+    
+    func endSession() {
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        
+        // Disable DND if we enabled it
+        if let task = activeTask, case .timeBlock(let blockType) = task.type, blockType == .focus {
+            disableDND()
+        }
+        
+        hideCountdownWindow()
+        
+        print("DEBUG: Ended focus session for '\(activeTask?.title ?? "unknown")'")
+        
+        activeTask = nil
+        isSessionActive = false
+        timeRemaining = 0
+    }
+    
+    private func updateCountdown() {
+        timeRemaining -= 1
+        
+        if timeRemaining <= 0 {
+            endSession()
+        } else {
+            // Update countdown window
+            updateCountdownWindow()
+        }
+    }
+    
+    // MARK: - DND Control
+    
+    private func enableDND() {
+        // Use shortcuts to enable Focus mode on macOS
+        let script = """
+        tell application "System Events"
+            tell application process "ControlCenter"
+                -- Try to enable Do Not Disturb via AppleScript
+            end tell
+        end tell
+        """
+        
+        // Use shell command to enable Focus mode
+        let task = Process()
+        task.launchPath = "/usr/bin/shortcuts"
+        task.arguments = ["run", "Turn On Do Not Disturb"]
+        
+        do {
+            try task.run()
+            print("DEBUG: Enabled Do Not Disturb mode")
+        } catch {
+            // Fallback: Use AppleScript approach
+            print("DEBUG: Could not run shortcut, trying alternative method")
+            enableDNDFallback()
+        }
+    }
+    
+    private func enableDNDFallback() {
+        // Alternative method using defaults
+        let script = """
+        do shell script "defaults -currentHost write com.apple.notificationcenterui doNotDisturb -bool true && killall NotificationCenter 2>/dev/null || true"
+        """
+        
+        var error: NSDictionary?
+        if let appleScript = NSAppleScript(source: script) {
+            appleScript.executeAndReturnError(&error)
+            if let error = error {
+                print("DEBUG: AppleScript error: \(error)")
+            }
+        }
+    }
+    
+    private func disableDND() {
+        let task = Process()
+        task.launchPath = "/usr/bin/shortcuts"
+        task.arguments = ["run", "Turn Off Do Not Disturb"]
+        
+        do {
+            try task.run()
+            print("DEBUG: Disabled Do Not Disturb mode")
+        } catch {
+            print("DEBUG: Could not run shortcut to disable DND")
+            disableDNDFallback()
+        }
+    }
+    
+    private func disableDNDFallback() {
+        let script = """
+        do shell script "defaults -currentHost write com.apple.notificationcenterui doNotDisturb -bool false && killall NotificationCenter 2>/dev/null || true"
+        """
+        
+        var error: NSDictionary?
+        if let appleScript = NSAppleScript(source: script) {
+            appleScript.executeAndReturnError(&error)
+        }
+    }
+    
+    // MARK: - Countdown Window
+    
+    private func showCountdownWindow() {
+        guard let task = activeTask else { return }
+        
+        DispatchQueue.main.async {
+            let contentView = FocusCountdownView(manager: self)
+            let hostingView = NSHostingView(rootView: contentView)
+            hostingView.frame = NSRect(x: 0, y: 0, width: 200, height: 80)
+            
+            // Get screen dimensions
+            guard let screen = NSScreen.main else { return }
+            let screenFrame = screen.visibleFrame
+            
+            // Position at bottom right
+            let windowX = screenFrame.maxX - 210
+            let windowY = screenFrame.minY + 10
+            
+            let window = NSWindow(
+                contentRect: NSRect(x: windowX, y: windowY, width: 200, height: 80),
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            
+            window.contentView = hostingView
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.level = .floating
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+            window.hasShadow = true
+            window.hidesOnDeactivate = false
+            
+            window.orderFrontRegardless()
+            
+            self.countdownWindow = window
+        }
+    }
+    
+    private func updateCountdownWindow() {
+        // The SwiftUI view will auto-update via @Published properties
+    }
+    
+    private func hideCountdownWindow() {
+        DispatchQueue.main.async {
+            self.countdownWindow?.close()
+            self.countdownWindow = nil
+        }
+    }
+    
+    // Helper to format time
+    func formattedTimeRemaining() -> String {
+        let hours = Int(timeRemaining) / 3600
+        let minutes = (Int(timeRemaining) % 3600) / 60
+        let seconds = Int(timeRemaining) % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%02d:%02d", minutes, seconds)
+        }
+    }
+}
+
+// MARK: - Focus Countdown View (Mini floating box)
+struct FocusCountdownView: View {
+    @ObservedObject var manager: FocusSessionManager
+    @State private var isHovered = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Task name
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(taskColor)
+                    .frame(width: 8, height: 8)
+                
+                Text(manager.activeTask?.title ?? "Focus")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                
+                Spacer()
+                
+                // Close button on hover
+                if isHovered {
+                    Button {
+                        manager.endSession()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            
+            // Countdown timer
+            HStack(spacing: 8) {
+                Image(systemName: "clock.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(timerColor)
+                
+                Text(manager.formattedTimeRemaining())
+                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+                
+                Spacer()
+                
+                Text("left")
+                    .font(.system(size: 10))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            
+            // Progress bar
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.white.opacity(0.2))
+                        .frame(height: 4)
+                    
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(timerColor)
+                        .frame(width: geo.size.width * progress, height: 4)
+                }
+            }
+            .frame(height: 4)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(
+                    LinearGradient(
+                        colors: [Color(red: 0.15, green: 0.15, blue: 0.2), Color(red: 0.1, green: 0.1, blue: 0.15)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(taskColor.opacity(0.5), lineWidth: 1)
+        )
+        .onHover { isHovered = $0 }
+    }
+    
+    private var taskColor: Color {
+        manager.activeTask?.type.color ?? .blue
+    }
+    
+    private var timerColor: Color {
+        if manager.timeRemaining < 60 {
+            return .red
+        } else if manager.timeRemaining < 300 {
+            return .orange
+        } else {
+            return .green
+        }
+    }
+    
+    private var progress: CGFloat {
+        guard let task = manager.activeTask else { return 0 }
+        let totalDuration = TimeInterval((task.endHour - task.startHour) * 3600 + (task.endMinute - task.startMinute) * 60)
+        guard totalDuration > 0 else { return 0 }
+        return CGFloat(manager.timeRemaining / totalDuration)
     }
 }
 
