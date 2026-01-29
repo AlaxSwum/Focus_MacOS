@@ -6262,20 +6262,23 @@ class FocusSessionManager: ObservableObject {
         guard let task = activeTask else { return }
         
         DispatchQueue.main.async {
+            // Close existing window if any
+            self.countdownWindow?.close()
+            
             let contentView = FocusCountdownView(manager: self)
             let hostingView = NSHostingView(rootView: contentView)
-            hostingView.frame = NSRect(x: 0, y: 0, width: 200, height: 80)
+            hostingView.frame = NSRect(x: 0, y: 0, width: 220, height: 90)
             
             // Get screen dimensions
             guard let screen = NSScreen.main else { return }
             let screenFrame = screen.visibleFrame
             
-            // Position at bottom right
-            let windowX = screenFrame.maxX - 210
-            let windowY = screenFrame.minY + 10
+            // Position at bottom right by default
+            let windowX = screenFrame.maxX - 230
+            let windowY = screenFrame.minY + 20
             
             let window = NSWindow(
-                contentRect: NSRect(x: windowX, y: windowY, width: 200, height: 80),
+                contentRect: NSRect(x: windowX, y: windowY, width: 220, height: 90),
                 styleMask: [.borderless],
                 backing: .buffered,
                 defer: false
@@ -6284,10 +6287,18 @@ class FocusSessionManager: ObservableObject {
             window.contentView = hostingView
             window.isOpaque = false
             window.backgroundColor = .clear
-            window.level = .floating
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+            
+            // HIGHEST window level - appears above ALL apps including full-screen
+            window.level = .screenSaver
+            
+            // Can appear on all spaces and above full-screen apps
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+            
             window.hasShadow = true
             window.hidesOnDeactivate = false
+            
+            // MOVABLE - user can drag the window anywhere
+            window.isMovableByWindowBackground = true
             
             window.orderFrontRegardless()
             
@@ -6320,15 +6331,22 @@ class FocusSessionManager: ObservableObject {
     }
 }
 
-// MARK: - Focus Countdown View (Mini floating box)
+// MARK: - Focus Countdown View (Mini floating box - DRAGGABLE)
 struct FocusCountdownView: View {
     @ObservedObject var manager: FocusSessionManager
     @State private var isHovered = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Task name
+            // Drag handle + Task name
             HStack(spacing: 6) {
+                // Drag indicator (visible on hover)
+                if isHovered {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 8))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+                
                 Circle()
                     .fill(taskColor)
                     .frame(width: 8, height: 8)
@@ -6345,9 +6363,9 @@ struct FocusCountdownView: View {
                     Button {
                         manager.endSession()
                     } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(.white.opacity(0.7))
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.6))
                     }
                     .buttonStyle(.plain)
                 }
@@ -6356,11 +6374,11 @@ struct FocusCountdownView: View {
             // Countdown timer
             HStack(spacing: 8) {
                 Image(systemName: "clock.fill")
-                    .font(.system(size: 14))
+                    .font(.system(size: 16))
                     .foregroundColor(timerColor)
                 
                 Text(manager.formattedTimeRemaining())
-                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    .font(.system(size: 22, weight: .bold, design: .monospaced))
                     .foregroundColor(.white)
                 
                 Spacer()
@@ -6373,34 +6391,49 @@ struct FocusCountdownView: View {
             // Progress bar
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.white.opacity(0.2))
-                        .frame(height: 4)
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.white.opacity(0.15))
+                        .frame(height: 5)
                     
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(timerColor)
-                        .frame(width: geo.size.width * progress, height: 4)
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(
+                            LinearGradient(
+                                colors: [timerColor, timerColor.opacity(0.7)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: max(0, geo.size.width * progress), height: 5)
                 }
             }
-            .frame(height: 4)
+            .frame(height: 5)
         }
-        .padding(12)
+        .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 14)
                 .fill(
                     LinearGradient(
-                        colors: [Color(red: 0.15, green: 0.15, blue: 0.2), Color(red: 0.1, green: 0.1, blue: 0.15)],
+                        colors: [Color(red: 0.12, green: 0.12, blue: 0.16), Color(red: 0.08, green: 0.08, blue: 0.12)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
-                .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
+                .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(taskColor.opacity(0.5), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [taskColor.opacity(0.6), taskColor.opacity(0.2)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.5
+                )
         )
         .onHover { isHovered = $0 }
+        // Cursor changes to indicate draggable
+        .help("Drag to move • Click X to end session")
     }
     
     private var taskColor: Color {
