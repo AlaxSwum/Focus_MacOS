@@ -59,6 +59,11 @@ struct AddEditTaskView: View {
     @State private var showError: Bool = false
     @State private var errorMessage: String = ""
     
+    // Focus mode settings
+    @State private var showAllowedAppsSheet = false
+    @State private var newAllowedApp = ""
+    @StateObject private var focusStats = FocusStatsManager.shared
+    
     private var isEditing: Bool { task != nil }
     
     private let supabaseURL = "https://bayyefskgflbyyuwrlgm.supabase.co"
@@ -165,6 +170,11 @@ struct AddEditTaskView: View {
                             typeButton(.goal)
                             typeButton(.project)
                         }
+                    }
+                    
+                    // Focus Mode Settings - Only show when Focus type is selected
+                    if selectedType == .focus {
+                        focusModeSettingsSection
                     }
                     
                     // Category
@@ -553,6 +563,195 @@ struct AddEditTaskView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+    
+    // MARK: - Focus Mode Settings Section
+    private var focusModeSettingsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "shield.checkered")
+                    .font(.system(size: 14))
+                    .foregroundColor(.blue)
+                Text("Focus Mode Settings")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            
+            Text("During this focus session, you'll be notified if you switch to non-allowed apps")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+            
+            // Allowed Apps
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Allowed Apps")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.secondary)
+                
+                // App tags
+                let columns = [GridItem(.adaptive(minimum: 90), spacing: 6)]
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+                    ForEach(focusStats.allowedApps, id: \.self) { app in
+                        HStack(spacing: 4) {
+                            Text(app)
+                                .font(.system(size: 11))
+                            Button {
+                                focusStats.removeAllowedApp(app)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.gray)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+                    
+                    // Add app button
+                    Button { showAllowedAppsSheet = true } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 10))
+                            Text("Add App")
+                                .font(.system(size: 11))
+                        }
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.05))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().strokeBorder(Color.blue.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [3])))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            
+            // Allowed Websites
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Allowed Websites")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.secondary)
+                
+                let columns = [GridItem(.adaptive(minimum: 100), spacing: 6)]
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+                    ForEach(focusStats.allowedWebsites, id: \.self) { site in
+                        HStack(spacing: 4) {
+                            Text(site)
+                                .font(.system(size: 10))
+                                .lineLimit(1)
+                            Button {
+                                focusStats.removeAllowedWebsite(site)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.gray)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.green.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+                }
+            }
+            
+            // Info
+            HStack(spacing: 6) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 11))
+                    .foregroundColor(.orange)
+                Text("DND will be enabled automatically during this focus session")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
+            .padding(8)
+            .background(Color.orange.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .padding(16)
+        .background(Color.blue.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.blue.opacity(0.2), lineWidth: 1)
+        )
+        .sheet(isPresented: $showAllowedAppsSheet) {
+            addAllowedAppSheet
+        }
+    }
+    
+    // Add allowed app sheet
+    private var addAllowedAppSheet: some View {
+        VStack(spacing: 16) {
+            Text("Add Allowed App")
+                .font(.headline)
+            
+            Text("Enter the app name that should be allowed during focus sessions")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            TextField("App name (e.g., Preview, Books, Safari)", text: $newAllowedApp)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 280)
+            
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    showAllowedAppsSheet = false
+                    newAllowedApp = ""
+                }
+                
+                Button("Add") {
+                    if !newAllowedApp.isEmpty {
+                        focusStats.addAllowedApp(newAllowedApp)
+                        newAllowedApp = ""
+                        showAllowedAppsSheet = false
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(newAllowedApp.isEmpty)
+            }
+            
+            // Quick add common apps
+            Divider()
+            
+            Text("Quick Add")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            HStack(spacing: 8) {
+                quickAddButton("Notes")
+                quickAddButton("Xcode")
+                quickAddButton("Terminal")
+                quickAddButton("Finder")
+            }
+            
+            HStack(spacing: 8) {
+                quickAddButton("VS Code")
+                quickAddButton("Slack")
+                quickAddButton("Zoom")
+            }
+        }
+        .padding(24)
+        .frame(width: 350)
+    }
+    
+    private func quickAddButton(_ appName: String) -> some View {
+        Button {
+            focusStats.addAllowedApp(appName)
+        } label: {
+            Text(appName)
+                .font(.system(size: 11))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.blue.opacity(0.1))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(focusStats.allowedApps.contains(appName))
+        .opacity(focusStats.allowedApps.contains(appName) ? 0.5 : 1)
     }
     
     // MARK: - Category Chip
