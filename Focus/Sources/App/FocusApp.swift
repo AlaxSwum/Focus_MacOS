@@ -4298,6 +4298,7 @@ struct FullAppWindowView: View {
                 sidebarItem(index: 2, title: "Meetings", icon: "video.fill", color: .purple)
                 sidebarItem(index: 3, title: "Rule Book", icon: "book.closed.fill", color: .orange)
                 sidebarItem(index: 4, title: "Journal", icon: "book.pages.fill", color: .pink)
+                sidebarItem(index: 5, title: "Scoreboard", icon: "trophy.fill", color: .yellow)
             }
             .padding(.horizontal, 12)
             
@@ -4379,6 +4380,10 @@ struct FullAppWindowView: View {
                 .environmentObject(authManager)
         case 4:
             FullJournalView()
+                .environmentObject(taskManager)
+                .environmentObject(authManager)
+        case 5:
+            ScoreboardView()
                 .environmentObject(taskManager)
                 .environmentObject(authManager)
         default:
@@ -6110,9 +6115,12 @@ class FocusSessionManager: ObservableObject {
         }
     }
     
+    private var sessionStartTime: Date?
+    
     func startSession(for task: TaskItem) {
         activeTask = task
         isSessionActive = true
+        sessionStartTime = Date()
         
         // Calculate time remaining
         let calendar = Calendar.current
@@ -6126,9 +6134,10 @@ class FocusSessionManager: ObservableObject {
         
         timeRemaining = TimeInterval(taskEndSeconds - currentTotalSeconds)
         
-        // Enable DND if this is a Focus-type task
+        // Enable DND and app monitoring if this is a Focus-type task
         if case .timeBlock(let blockType) = task.type, blockType == .focus {
             enableDND()
+            AppMonitor.shared.startMonitoring()
         }
         
         // Show countdown window
@@ -6146,9 +6155,17 @@ class FocusSessionManager: ObservableObject {
         countdownTimer?.invalidate()
         countdownTimer = nil
         
-        // Disable DND if we enabled it
+        // Track focus time if we have a start time
+        if let startTime = sessionStartTime {
+            let focusSeconds = Int(Date().timeIntervalSince(startTime))
+            FocusStatsManager.shared.addFocusTime(focusSeconds)
+            FocusStatsManager.shared.completeSession()
+        }
+        
+        // Disable DND and stop monitoring if we enabled it
         if let task = activeTask, case .timeBlock(let blockType) = task.type, blockType == .focus {
             disableDND()
+            AppMonitor.shared.stopMonitoring()
         }
         
         hideCountdownWindow()
@@ -6158,6 +6175,7 @@ class FocusSessionManager: ObservableObject {
         activeTask = nil
         isSessionActive = false
         timeRemaining = 0
+        sessionStartTime = nil
     }
     
     private func updateCountdown() {
@@ -6404,6 +6422,539 @@ struct FocusCountdownView: View {
         let totalDuration = TimeInterval((task.endHour - task.startHour) * 3600 + (task.endMinute - task.startMinute) * 60)
         guard totalDuration > 0 else { return 0 }
         return CGFloat(manager.timeRemaining / totalDuration)
+    }
+}
+
+// MARK: - Focus Stats Manager (Tracks focus hours and achievements)
+class FocusStatsManager: ObservableObject {
+    static let shared = FocusStatsManager()
+    
+    @Published var totalFocusSeconds: Int = 0
+    @Published var todayFocusSeconds: Int = 0
+    @Published var weekFocusSeconds: Int = 0
+    @Published var sessionsCompleted: Int = 0
+    @Published var currentStreak: Int = 0
+    @Published var longestStreak: Int = 0
+    @Published var achievements: [FocusAchievement] = []
+    @Published var allowedApps: [String] = ["Preview", "Books", "Safari", "Google Chrome"]
+    @Published var allowedWebsites: [String] = ["gemini.google.com", "chatgpt.com", "chat.openai.com", "claude.ai"]
+    
+    private let userDefaults = UserDefaults.standard
+    private let statsKey = "focus_stats"
+    private let allowedAppsKey = "focus_allowed_apps"
+    private let allowedWebsitesKey = "focus_allowed_websites"
+    
+    init() {
+        loadStats()
+        loadAllowedApps()
+        checkAchievements()
+    }
+    
+    func addFocusTime(_ seconds: Int) {
+        totalFocusSeconds += seconds
+        todayFocusSeconds += seconds
+        weekFocusSeconds += seconds
+        saveStats()
+        checkAchievements()
+    }
+    
+    func completeSession() {
+        sessionsCompleted += 1
+        currentStreak += 1
+        if currentStreak > longestStreak {
+            longestStreak = currentStreak
+        }
+        saveStats()
+        checkAchievements()
+    }
+    
+    // Format time for display
+    var totalFocusHours: String {
+        let hours = totalFocusSeconds / 3600
+        let minutes = (totalFocusSeconds % 3600) / 60
+        return "\(hours)h \(minutes)m"
+    }
+    
+    var todayFocusFormatted: String {
+        let hours = todayFocusSeconds / 3600
+        let minutes = (todayFocusSeconds % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        return "\(minutes) min"
+    }
+    
+    var weekFocusFormatted: String {
+        let hours = weekFocusSeconds / 3600
+        let minutes = (weekFocusSeconds % 3600) / 60
+        return "\(hours)h \(minutes)m"
+    }
+    
+    // Allowed apps management
+    func addAllowedApp(_ app: String) {
+        if !allowedApps.contains(app) {
+            allowedApps.append(app)
+            saveAllowedApps()
+        }
+    }
+    
+    func removeAllowedApp(_ app: String) {
+        allowedApps.removeAll { $0 == app }
+        saveAllowedApps()
+    }
+    
+    func addAllowedWebsite(_ website: String) {
+        if !allowedWebsites.contains(website) {
+            allowedWebsites.append(website)
+            saveAllowedApps()
+        }
+    }
+    
+    func removeAllowedWebsite(_ website: String) {
+        allowedWebsites.removeAll { $0 == website }
+        saveAllowedApps()
+    }
+    
+    private func loadStats() {
+        totalFocusSeconds = userDefaults.integer(forKey: "\(statsKey)_total")
+        todayFocusSeconds = userDefaults.integer(forKey: "\(statsKey)_today")
+        weekFocusSeconds = userDefaults.integer(forKey: "\(statsKey)_week")
+        sessionsCompleted = userDefaults.integer(forKey: "\(statsKey)_sessions")
+        currentStreak = userDefaults.integer(forKey: "\(statsKey)_streak")
+        longestStreak = userDefaults.integer(forKey: "\(statsKey)_longest_streak")
+    }
+    
+    private func saveStats() {
+        userDefaults.set(totalFocusSeconds, forKey: "\(statsKey)_total")
+        userDefaults.set(todayFocusSeconds, forKey: "\(statsKey)_today")
+        userDefaults.set(weekFocusSeconds, forKey: "\(statsKey)_week")
+        userDefaults.set(sessionsCompleted, forKey: "\(statsKey)_sessions")
+        userDefaults.set(currentStreak, forKey: "\(statsKey)_streak")
+        userDefaults.set(longestStreak, forKey: "\(statsKey)_longest_streak")
+    }
+    
+    private func loadAllowedApps() {
+        if let apps = userDefaults.array(forKey: allowedAppsKey) as? [String] {
+            allowedApps = apps
+        }
+        if let websites = userDefaults.array(forKey: allowedWebsitesKey) as? [String] {
+            allowedWebsites = websites
+        }
+    }
+    
+    private func saveAllowedApps() {
+        userDefaults.set(allowedApps, forKey: allowedAppsKey)
+        userDefaults.set(allowedWebsites, forKey: allowedWebsitesKey)
+    }
+    
+    private func checkAchievements() {
+        achievements = []
+        
+        // Time-based achievements
+        if totalFocusSeconds >= 3600 { achievements.append(.firstHour) }
+        if totalFocusSeconds >= 3600 * 10 { achievements.append(.tenHours) }
+        if totalFocusSeconds >= 3600 * 50 { achievements.append(.fiftyHours) }
+        if totalFocusSeconds >= 3600 * 100 { achievements.append(.hundredHours) }
+        
+        // Session-based achievements
+        if sessionsCompleted >= 1 { achievements.append(.firstSession) }
+        if sessionsCompleted >= 10 { achievements.append(.tenSessions) }
+        if sessionsCompleted >= 50 { achievements.append(.fiftySessions) }
+        if sessionsCompleted >= 100 { achievements.append(.hundredSessions) }
+        
+        // Streak-based achievements
+        if longestStreak >= 3 { achievements.append(.threeStreak) }
+        if longestStreak >= 7 { achievements.append(.weekStreak) }
+        if longestStreak >= 30 { achievements.append(.monthStreak) }
+    }
+}
+
+enum FocusAchievement: String, CaseIterable {
+    case firstSession = "First Focus"
+    case tenSessions = "10 Sessions"
+    case fiftySessions = "50 Sessions"
+    case hundredSessions = "100 Sessions"
+    case firstHour = "1 Hour Total"
+    case tenHours = "10 Hours Total"
+    case fiftyHours = "50 Hours Total"
+    case hundredHours = "100 Hours Total"
+    case threeStreak = "3 Day Streak"
+    case weekStreak = "Week Streak"
+    case monthStreak = "Month Streak"
+    
+    var icon: String {
+        switch self {
+        case .firstSession: return "star.fill"
+        case .tenSessions: return "star.circle.fill"
+        case .fiftySessions: return "star.square.fill"
+        case .hundredSessions: return "sparkles"
+        case .firstHour: return "clock.fill"
+        case .tenHours: return "clock.badge.checkmark.fill"
+        case .fiftyHours: return "timer"
+        case .hundredHours: return "crown.fill"
+        case .threeStreak: return "flame.fill"
+        case .weekStreak: return "flame.circle.fill"
+        case .monthStreak: return "bolt.fill"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .firstSession, .firstHour: return .blue
+        case .tenSessions, .tenHours: return .green
+        case .fiftySessions, .fiftyHours: return .purple
+        case .hundredSessions, .hundredHours: return .yellow
+        case .threeStreak: return .orange
+        case .weekStreak: return .red
+        case .monthStreak: return .pink
+        }
+    }
+}
+
+// MARK: - App Monitor (Watches for off-task apps)
+class AppMonitor {
+    static let shared = AppMonitor()
+    
+    private var monitorTimer: Timer?
+    private var lastNotificationTime: Date?
+    private let notificationCooldown: TimeInterval = 30 // Seconds between notifications
+    
+    func startMonitoring() {
+        monitorTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            self?.checkCurrentApp()
+        }
+    }
+    
+    func stopMonitoring() {
+        monitorTimer?.invalidate()
+        monitorTimer = nil
+    }
+    
+    private func checkCurrentApp() {
+        guard FocusSessionManager.shared.isSessionActive else { return }
+        guard let task = FocusSessionManager.shared.activeTask else { return }
+        
+        // Only monitor Focus-type tasks
+        guard case .timeBlock(let blockType) = task.type, blockType == .focus else { return }
+        
+        // Get frontmost app
+        guard let frontApp = NSWorkspace.shared.frontmostApplication else { return }
+        let appName = frontApp.localizedName ?? ""
+        let bundleId = frontApp.bundleIdentifier ?? ""
+        
+        // Skip if it's the Focus app itself
+        if bundleId.contains("Focus") { return }
+        
+        // Check if app is allowed
+        let stats = FocusStatsManager.shared
+        let isAllowed = stats.allowedApps.contains { appName.lowercased().contains($0.lowercased()) }
+        
+        if !isAllowed {
+            // Check cooldown
+            if let lastTime = lastNotificationTime,
+               Date().timeIntervalSince(lastTime) < notificationCooldown {
+                return
+            }
+            
+            // Show distraction notification
+            showDistractionNotification(appName: appName)
+            lastNotificationTime = Date()
+        }
+    }
+    
+    private func showDistractionNotification(appName: String) {
+        DispatchQueue.main.async {
+            FloatingNotificationManager.shared.show(
+                title: "Stay Focused!",
+                subtitle: "You're in a focus session",
+                body: "'\(appName)' is not in your allowed apps. Get back to work!",
+                duration: 5.0
+            )
+            
+            // Play alert sound
+            NSSound(named: "Basso")?.play()
+        }
+    }
+}
+
+// MARK: - Scoreboard View
+struct ScoreboardView: View {
+    @EnvironmentObject var taskManager: TaskManager
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var stats = FocusStatsManager.shared
+    @State private var newAllowedApp = ""
+    @State private var newAllowedWebsite = ""
+    @State private var showAddApp = false
+    @State private var showAddWebsite = false
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                // Header
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "trophy.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(.yellow)
+                            Text("Scoreboard")
+                                .font(.system(size: 28, weight: .bold))
+                        }
+                        Text("Track your focus progress and achievements")
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+                
+                // Stats Cards
+                HStack(spacing: 16) {
+                    statCard(title: "Today", value: stats.todayFocusFormatted, icon: "sun.max.fill", color: .orange)
+                    statCard(title: "This Week", value: stats.weekFocusFormatted, icon: "calendar", color: .blue)
+                    statCard(title: "Total", value: stats.totalFocusHours, icon: "clock.fill", color: .green)
+                    statCard(title: "Sessions", value: "\(stats.sessionsCompleted)", icon: "checkmark.circle.fill", color: .purple)
+                }
+                .padding(.horizontal, 24)
+                
+                // Streaks
+                HStack(spacing: 16) {
+                    streakCard(title: "Current Streak", value: stats.currentStreak, icon: "flame.fill", color: .orange)
+                    streakCard(title: "Longest Streak", value: stats.longestStreak, icon: "crown.fill", color: .yellow)
+                }
+                .padding(.horizontal, 24)
+                
+                // Achievements
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Achievements")
+                        .font(.system(size: 18, weight: .semibold))
+                    
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 12) {
+                        ForEach(FocusAchievement.allCases, id: \.self) { achievement in
+                            achievementCard(achievement: achievement, unlocked: stats.achievements.contains(achievement))
+                        }
+                    }
+                }
+                .padding(20)
+                .background(Color(nsColor: NSColor.controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 24)
+                
+                // Allowed Apps Section
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Allowed Apps During Focus")
+                            .font(.system(size: 18, weight: .semibold))
+                        Spacer()
+                        Button {
+                            showAddApp = true
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(.blue)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    Text("These apps won't trigger distraction alerts during focus sessions")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    
+                    ScoreboardFlowLayout(spacing: 8) {
+                        ForEach(stats.allowedApps, id: \.self) { app in
+                            appTag(name: app, onRemove: { stats.removeAllowedApp(app) })
+                        }
+                    }
+                    
+                    if showAddApp {
+                        HStack {
+                            TextField("App name (e.g., Preview, Books)", text: $newAllowedApp)
+                                .textFieldStyle(.roundedBorder)
+                            Button("Add") {
+                                if !newAllowedApp.isEmpty {
+                                    stats.addAllowedApp(newAllowedApp)
+                                    newAllowedApp = ""
+                                    showAddApp = false
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            Button("Cancel") {
+                                showAddApp = false
+                                newAllowedApp = ""
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+                .background(Color(nsColor: NSColor.controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 24)
+                
+                // Allowed Websites Section
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Allowed Websites")
+                            .font(.system(size: 18, weight: .semibold))
+                        Spacer()
+                        Button {
+                            showAddWebsite = true
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(.blue)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    Text("Browser visits to these sites won't trigger alerts")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    
+                    ScoreboardFlowLayout(spacing: 8) {
+                        ForEach(stats.allowedWebsites, id: \.self) { site in
+                            appTag(name: site, onRemove: { stats.removeAllowedWebsite(site) })
+                        }
+                    }
+                    
+                    if showAddWebsite {
+                        HStack {
+                            TextField("Website (e.g., chatgpt.com)", text: $newAllowedWebsite)
+                                .textFieldStyle(.roundedBorder)
+                            Button("Add") {
+                                if !newAllowedWebsite.isEmpty {
+                                    stats.addAllowedWebsite(newAllowedWebsite)
+                                    newAllowedWebsite = ""
+                                    showAddWebsite = false
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            Button("Cancel") {
+                                showAddWebsite = false
+                                newAllowedWebsite = ""
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+                .background(Color(nsColor: NSColor.controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 24)
+                
+                Spacer(minLength: 40)
+            }
+        }
+        .background(Color(nsColor: NSColor.windowBackgroundColor))
+    }
+    
+    private func statCard(title: String, value: String, icon: String, color: Color) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+                .foregroundColor(color)
+            Text(value)
+                .font(.system(size: 24, weight: .bold))
+            Text(title)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background(Color(nsColor: NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+    
+    private func streakCard(title: String, value: Int, icon: String, color: Color) -> some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.system(size: 32))
+                .foregroundColor(color)
+            VStack(alignment: .leading) {
+                Text("\(value) days")
+                    .font(.system(size: 24, weight: .bold))
+                Text(title)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background(Color(nsColor: NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+    
+    private func achievementCard(achievement: FocusAchievement, unlocked: Bool) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: achievement.icon)
+                .font(.system(size: 20))
+                .foregroundColor(unlocked ? achievement.color : .gray)
+            Text(achievement.rawValue)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(unlocked ? .primary : .secondary)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(unlocked ? achievement.color.opacity(0.1) : Color.gray.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(unlocked ? achievement.color.opacity(0.3) : Color.gray.opacity(0.2), lineWidth: 1)
+        )
+    }
+    
+    private func appTag(name: String, onRemove: @escaping () -> Void) -> some View {
+        HStack(spacing: 6) {
+            Text(name)
+                .font(.system(size: 12, weight: .medium))
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.blue.opacity(0.1))
+        .clipShape(Capsule())
+    }
+}
+
+// Helper for flow layout
+struct ScoreboardFlowLayout: Layout {
+    var spacing: CGFloat = 8
+    
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = layout(proposal: proposal, subviews: subviews)
+        return result.size
+    }
+    
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = layout(proposal: proposal, subviews: subviews)
+        for (index, position) in result.positions.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y), proposal: .unspecified)
+        }
+    }
+    
+    private func layout(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
+        let maxWidth = proposal.width ?? .infinity
+        var positions: [CGPoint] = []
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > maxWidth && currentX > 0 {
+                currentX = 0
+                currentY += lineHeight + spacing
+                lineHeight = 0
+            }
+            positions.append(CGPoint(x: currentX, y: currentY))
+            currentX += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+        
+        return (CGSize(width: maxWidth, height: currentY + lineHeight), positions)
     }
 }
 
