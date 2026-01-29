@@ -62,7 +62,8 @@ struct AddEditTaskView: View {
     // Focus mode settings
     @State private var showAllowedAppsSheet = false
     @State private var newAllowedApp = ""
-    @StateObject private var focusStats = FocusStatsManager.shared
+    @State private var allowedApps: [String] = FocusStatsManager.shared.allowedApps
+    @State private var allowedWebsites: [String] = FocusStatsManager.shared.allowedWebsites
     
     private var isEditing: Bool { task != nil }
     
@@ -589,12 +590,12 @@ struct AddEditTaskView: View {
                 // App tags
                 let columns = [GridItem(.adaptive(minimum: 90), spacing: 6)]
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
-                    ForEach(focusStats.allowedApps, id: \.self) { app in
+                    ForEach(allowedApps, id: \.self) { app in
                         HStack(spacing: 4) {
                             Text(app)
                                 .font(.system(size: 11))
                             Button {
-                                focusStats.removeAllowedApp(app)
+                                removeAllowedApp(app)
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.system(size: 10))
@@ -635,13 +636,13 @@ struct AddEditTaskView: View {
                 
                 let columns = [GridItem(.adaptive(minimum: 100), spacing: 6)]
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
-                    ForEach(focusStats.allowedWebsites, id: \.self) { site in
+                    ForEach(allowedWebsites, id: \.self) { site in
                         HStack(spacing: 4) {
                             Text(site)
                                 .font(.system(size: 10))
                                 .lineLimit(1)
                             Button {
-                                focusStats.removeAllowedWebsite(site)
+                                removeAllowedWebsite(site)
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.system(size: 10))
@@ -682,6 +683,24 @@ struct AddEditTaskView: View {
         }
     }
     
+    // Helper functions for allowed apps/websites
+    private func addAllowedApp(_ app: String) {
+        if !allowedApps.contains(app) {
+            allowedApps.append(app)
+            FocusStatsManager.shared.addAllowedApp(app)
+        }
+    }
+    
+    private func removeAllowedApp(_ app: String) {
+        allowedApps.removeAll { $0 == app }
+        FocusStatsManager.shared.removeAllowedApp(app)
+    }
+    
+    private func removeAllowedWebsite(_ site: String) {
+        allowedWebsites.removeAll { $0 == site }
+        FocusStatsManager.shared.removeAllowedWebsite(site)
+    }
+    
     // Add allowed app sheet
     private var addAllowedAppSheet: some View {
         VStack(spacing: 16) {
@@ -705,7 +724,7 @@ struct AddEditTaskView: View {
                 
                 Button("Add") {
                     if !newAllowedApp.isEmpty {
-                        focusStats.addAllowedApp(newAllowedApp)
+                        addAllowedApp(newAllowedApp)
                         newAllowedApp = ""
                         showAllowedAppsSheet = false
                     }
@@ -740,7 +759,7 @@ struct AddEditTaskView: View {
     
     private func quickAddButton(_ appName: String) -> some View {
         Button {
-            focusStats.addAllowedApp(appName)
+            addAllowedApp(appName)
         } label: {
             Text(appName)
                 .font(.system(size: 11))
@@ -750,8 +769,8 @@ struct AddEditTaskView: View {
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .disabled(focusStats.allowedApps.contains(appName))
-        .opacity(focusStats.allowedApps.contains(appName) ? 0.5 : 1)
+        .disabled(allowedApps.contains(appName))
+        .opacity(allowedApps.contains(appName) ? 0.5 : 1)
     }
     
     // MARK: - Category Chip
