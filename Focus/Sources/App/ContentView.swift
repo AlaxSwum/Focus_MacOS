@@ -4858,7 +4858,7 @@ struct AddMeetingSheet: View {
     @State private var newAgendaItem = ""
     @State private var reminderMinutes: Int = 15
     @State private var isSaving = false
-    @State private var projects: [ProjectOption] = [ProjectOption(id: 0, name: "Select a project", color: .gray)]
+    @State private var projects: [ProjectOption] = [ProjectOption(id: 0, name: "Personal (No Project)", color: .orange)]
     @State private var projectMembers: [ProjectMember] = []
     @State private var isLoadingProjects = true
     @State private var isLoadingMembers = false
@@ -5432,7 +5432,7 @@ struct AddMeetingSheet: View {
                 if let results = try? JSONDecoder().decode([ProjectData].self, from: projectsData) {
                     print("Decoded \(results.count) projects for user")
                     await MainActor.run {
-                        var loadedProjects = [ProjectOption(id: 0, name: "Select a project", color: .gray)]
+                        var loadedProjects = [ProjectOption(id: 0, name: "Personal (No Project)", color: .orange)]
                         let colors: [Color] = [.blue, .green, .purple, .orange, .red, .pink, .indigo, .teal]
                         for (index, proj) in results.enumerated() {
                             loadedProjects.append(ProjectOption(id: proj.id, name: proj.name, color: colors[index % colors.count]))
@@ -5573,13 +5573,8 @@ struct AddMeetingSheet: View {
         
         print("DEBUG: Creating meeting with userId: \(userId)")
         
-        // Project is required - validate before saving
-        guard selectedProject > 0 else {
-            errorMessage = "Please select a project for this meeting"
-            showError = true
-            print("ERROR: Project is required to create a meeting")
-            return
-        }
+        // Project is OPTIONAL - personal meetings don't need a project
+        // selectedProject = 0 means personal event (no project)
         
         // Validate title
         guard !title.trimmingCharacters(in: .whitespaces).isEmpty else {
@@ -5593,9 +5588,9 @@ struct AddMeetingSheet: View {
         Task {
             let success = await createMeeting(userId: userId)
             if success {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            await taskManager.fetchTasks(for: userId)
-            await MainActor.run { dismiss() }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                await taskManager.fetchTasks(for: userId)
+                await MainActor.run { dismiss() }
             } else {
                 await MainActor.run { 
                     isSaving = false
@@ -5621,12 +5616,10 @@ struct AddMeetingSheet: View {
         let now = Date()
         let nowStr = isoFormatter.string(from: now)
         
-        // Website uses these exact fields - matching supabase.js createMeeting function
-        // project_id is REQUIRED by the database (NOT NULL constraint)
-        let meetingData: [String: Any] = [
+        // Build meeting data - project_id is OPTIONAL (NULL for personal meetings)
+        var meetingData: [String: Any] = [
             "title": title,
             "description": description,
-            "project_id": selectedProject,  // REQUIRED - must be selected
             "date": dateFormatter.string(from: meetingDate),
             "time": startTimeStr,
             "duration": duration,
@@ -5634,6 +5627,12 @@ struct AddMeetingSheet: View {
             "created_at": nowStr,
             "updated_at": nowStr
         ]
+        
+        // Only add project_id if a project is selected (not 0)
+        if selectedProject > 0 {
+            meetingData["project_id"] = selectedProject
+        }
+        // If no project selected, it's a personal meeting (project_id will be NULL in DB)
         
         guard let url = URL(string: "\(supabaseURL)/rest/v1/projects_meeting") else { 
             await MainActor.run { errorMessage = "Invalid API URL" }
