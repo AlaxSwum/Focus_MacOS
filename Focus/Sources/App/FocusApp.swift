@@ -960,6 +960,8 @@ struct CheckmarkShape: Shape {
 }
 
 struct MenuBarIconView: View {
+    @ObservedObject private var focusSession = FocusSessionManager.shared
+    
     private static func loadLogo() -> NSImage? {
         return loadAppLogo()
     }
@@ -981,10 +983,32 @@ struct MenuBarIconView: View {
     private static let cachedIcon = createIcon()
     
     var body: some View {
-        if let icon = Self.cachedIcon {
-            Image(nsImage: icon)
+        HStack(spacing: 4) {
+            if let icon = Self.cachedIcon {
+                Image(nsImage: icon)
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+            }
+            
+            // Show countdown in menu bar during focus sessions
+            if focusSession.isSessionActive {
+                Text(menuBarTimeString)
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(.orange)
+            }
+        }
+    }
+    
+    private var menuBarTimeString: String {
+        let total = Int(focusSession.timeRemaining)
+        if total <= 0 { return "" }
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let seconds = total % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         } else {
-            Image(systemName: "checkmark.circle.fill")
+            return String(format: "%d:%02d", minutes, seconds)
         }
     }
 }
@@ -4954,42 +4978,33 @@ class FloatingNotificationManager {
         hostingView.frame = NSRect(x: 0, y: 0, width: windowWidth, height: windowHeight)
         
         guard let screen = NSScreen.main else { return }
-        let screenFrame = screen.visibleFrame
+        // Use screen.frame (not visibleFrame) to work with full-screen apps
+        let screenFrame = screen.frame
         
         // Start position: off-screen to the right
         let startX = screenFrame.maxX + 20
-        // End position: top-right corner
+        // End position: top-right corner (below menu bar area)
         let endX = screenFrame.maxX - windowWidth - 16
-        let windowY = screenFrame.maxY - windowHeight - 8
+        let windowY = screenFrame.maxY - windowHeight - 32
         
-        // Create a regular NSWindow for action buttons (not NSPanel)
-        // NSWindow handles button clicks better than NSPanel with borderless style
-        let window: NSWindow
-        if hasActions {
-            // Use regular window for action notifications - better button interaction
-            window = NSWindow(
-                contentRect: NSRect(x: startX, y: windowY, width: windowWidth, height: windowHeight),
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false
-            )
-        } else {
-            // Use panel for simple notifications
+        // Always use NSPanel with nonactivatingPanel for notifications
+        // This prevents stealing focus from full-screen apps
         let panel = NSPanel(
-                contentRect: NSRect(x: startX, y: windowY, width: windowWidth, height: windowHeight),
+            contentRect: NSRect(x: startX, y: windowY, width: windowWidth, height: windowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
         panel.becomesKeyOnlyIfNeeded = true
         panel.isFloatingPanel = true
-            window = panel
-        }
+        panel.worksWhenModal = true
+        let window: NSWindow = panel
         
         window.contentView = hostingView
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.level = .screenSaver  // Highest level to appear above full-screen apps
+        // Use NSWindow.Level with raw value higher than .screenSaver for full-screen overlay
+        window.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle, .transient]
         window.hasShadow = true
         window.isMovableByWindowBackground = false
@@ -5027,9 +5042,9 @@ class FloatingNotificationManager {
         self.keepOnTopTimer = nil
         
         // Keep window on top - periodically bring to front (essential for full-screen apps)
-        self.keepOnTopTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        self.keepOnTopTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
             guard let self = self, let panel = self.notificationPanel else { return }
-            panel.level = .screenSaver
+            panel.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)
             panel.orderFrontRegardless()
         }
         
@@ -6297,11 +6312,11 @@ class FocusSessionManager: ObservableObject {
             window.isOpaque = false
             window.backgroundColor = .clear
             
-            // HIGHEST window level - appears above ALL apps including full-screen
-            window.level = .screenSaver
+            // HIGHEST window level - above full-screen apps including Chrome, ChatGPT
+            window.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)
             
             // Can appear on all spaces and above full-screen apps
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .transient]
             
             window.hasShadow = true
             window.hidesOnDeactivate = false
@@ -6315,9 +6330,9 @@ class FocusSessionManager: ObservableObject {
             
             // Keep countdown window on top - essential for full-screen apps
             self.countdownKeepOnTopTimer?.invalidate()
-            self.countdownKeepOnTopTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self.countdownKeepOnTopTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
                 guard let self = self, let window = self.countdownWindow else { return }
-                window.level = .screenSaver
+                window.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)
                 window.orderFrontRegardless()
             }
         }
@@ -6663,17 +6678,16 @@ enum FocusAchievement: String, CaseIterable {
     }
 }
 
-// MARK: - App Monitor (Watches for off-task apps)
+// MARK: - App Monitor (Tracks focus stats only - no distraction reminders)
 class AppMonitor {
     static let shared = AppMonitor()
     
     private var monitorTimer: Timer?
-    private var lastNotificationTime: Date?
-    private let notificationCooldown: TimeInterval = 30 // Seconds between notifications
     
     func startMonitoring() {
-        monitorTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            self?.checkCurrentApp()
+        // Monitoring is now passive - just tracks stats, no distraction notifications
+        monitorTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            self?.trackCurrentApp()
         }
     }
     
@@ -6682,50 +6696,15 @@ class AppMonitor {
         monitorTimer = nil
     }
     
-    private func checkCurrentApp() {
+    private func trackCurrentApp() {
         guard FocusSessionManager.shared.isSessionActive else { return }
         guard let task = FocusSessionManager.shared.activeTask else { return }
         
-        // Only monitor Focus-type tasks
+        // Only track Focus-type tasks
         guard case .timeBlock(let blockType) = task.type, blockType == .focus else { return }
         
-        // Get frontmost app
-        guard let frontApp = NSWorkspace.shared.frontmostApplication else { return }
-        let appName = frontApp.localizedName ?? ""
-        let bundleId = frontApp.bundleIdentifier ?? ""
-        
-        // Skip if it's the Focus app itself
-        if bundleId.contains("Focus") { return }
-        
-        // Check if app is allowed
-        let stats = FocusStatsManager.shared
-        let isAllowed = stats.allowedApps.contains { appName.lowercased().contains($0.lowercased()) }
-        
-        if !isAllowed {
-            // Check cooldown
-            if let lastTime = lastNotificationTime,
-               Date().timeIntervalSince(lastTime) < notificationCooldown {
-                return
-            }
-            
-            // Show distraction notification
-            showDistractionNotification(appName: appName)
-            lastNotificationTime = Date()
-        }
-    }
-    
-    private func showDistractionNotification(appName: String) {
-        DispatchQueue.main.async {
-            FloatingNotificationManager.shared.show(
-                title: "Stay Focused!",
-                subtitle: "You're in a focus session",
-                body: "'\(appName)' is not in your allowed apps. Get back to work!",
-                duration: 5.0
-            )
-            
-            // Play alert sound
-            NSSound(named: "Basso")?.play()
-        }
+        // Passive tracking only - no distraction notifications
+        // Focus stats are tracked via FocusSessionManager
     }
 }
 
