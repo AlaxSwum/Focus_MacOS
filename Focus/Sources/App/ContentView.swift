@@ -5685,7 +5685,7 @@ struct AddMeetingSheet: View {
 struct FullRuleBookView: View {
     @EnvironmentObject var taskManager: TaskManager
     @EnvironmentObject var authManager: AuthManager
-    @ObservedObject private var ruleManager = RuleManager.shared
+    private let ruleManager = RuleManager.shared
     @State private var selectedPeriod: Int = 1
     @State private var hoveredPeriod: Int? = nil
     @State private var hoveredRule: String? = nil
@@ -7101,8 +7101,8 @@ struct FullRuleRow: View {
 struct FullJournalView: View {
     @EnvironmentObject var taskManager: TaskManager
     @EnvironmentObject var authManager: AuthManager
-    @ObservedObject private var journalManager = JournalManager.shared
-    @ObservedObject private var ruleManager = RuleManager.shared
+    private let journalManager = JournalManager.shared
+    private let ruleManager = RuleManager.shared
     
     @State private var viewMode: Int = 0  // 0 = Entries, 1 = Calendar
     @State private var selectedDate = Date()

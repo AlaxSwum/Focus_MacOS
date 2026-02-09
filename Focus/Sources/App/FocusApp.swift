@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UserNotifications
+import Combine
 #if os(macOS)
 import AppKit
 #endif
@@ -365,12 +366,13 @@ class JournalManager: ObservableObject {
 
 @main
 struct FocusApp: App {
-    // Use ObservedObject for singletons - they manage their own lifecycle
-    @ObservedObject private var authManager = AuthManager.shared
-    @ObservedObject private var taskManager = TaskManager.shared
-    @ObservedObject private var notificationManager = NotificationManager.shared
-    @ObservedObject private var themeManager = ThemeManager.shared
-    @ObservedObject private var inAppNotificationManager = InAppNotificationManager.shared
+    // Use plain let references - App struct lives forever, no observation needed at this level.
+    // Child views use @EnvironmentObject to observe changes safely.
+    private let authManager = AuthManager.shared
+    private let taskManager = TaskManager.shared
+    private let notificationManager = NotificationManager.shared
+    private let themeManager = ThemeManager.shared
+    private let inAppNotificationManager = InAppNotificationManager.shared
     
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -960,7 +962,13 @@ struct CheckmarkShape: Shape {
 }
 
 struct MenuBarIconView: View {
-    @ObservedObject private var focusSession = FocusSessionManager.shared
+    // Use @State + Timer to poll focus state instead of @ObservedObject on singleton
+    // This avoids Combine subscription leaks that cause crashes over time
+    @State private var isActive = false
+    @State private var timeRemaining: TimeInterval = 0
+    
+    // Timer to poll focus state every second
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
     private static func loadLogo() -> NSImage? {
         return loadAppLogo()
@@ -991,16 +999,22 @@ struct MenuBarIconView: View {
             }
             
             // Show countdown in menu bar during focus sessions
-            if focusSession.isSessionActive {
+            if isActive {
                 Text(menuBarTimeString)
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundColor(.orange)
             }
         }
+        .onReceive(timer) { _ in
+            // Poll FocusSessionManager directly - no Combine subscription overhead
+            let session = FocusSessionManager.shared
+            isActive = session.isSessionActive
+            timeRemaining = session.timeRemaining
+        }
     }
     
     private var menuBarTimeString: String {
-        let total = Int(focusSession.timeRemaining)
+        let total = Int(timeRemaining)
         if total <= 0 { return "" }
         let hours = total / 3600
         let minutes = (total % 3600) / 60
@@ -1056,7 +1070,8 @@ struct ProjectNextLogo: View {
 struct MenuBarDropdownView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var taskManager: TaskManager
-    @ObservedObject var ruleManager = RuleManager.shared
+    // Access singleton directly - no property wrapper needed to avoid memory issues
+    private let ruleManager = RuleManager.shared
     @Environment(\.openWindow) private var openWindow
     @State private var selectedTab = 0
     @State private var todaySubTab = 0  // 0 = Upcoming, 1 = Completed
@@ -6712,7 +6727,7 @@ class AppMonitor {
 struct ScoreboardView: View {
     @EnvironmentObject var taskManager: TaskManager
     @EnvironmentObject var authManager: AuthManager
-    @ObservedObject private var stats = FocusStatsManager.shared
+    private let stats = FocusStatsManager.shared
     @State private var newAllowedApp = ""
     @State private var newAllowedWebsite = ""
     @State private var showAddApp = false
