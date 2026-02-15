@@ -4290,7 +4290,7 @@ struct FullAppWindowView: View {
     @State private var selectedTab = 2  // Start on Meetings tab
 
     var body: some View {
-        if authManager.isAuthenticated {
+            if authManager.isAuthenticated {
             HStack(spacing: 0) {
                 // LEFT SIDEBAR - Navigation
                 sidebarNavigation
@@ -4304,8 +4304,8 @@ struct FullAppWindowView: View {
                 // MAIN CONTENT
                 contentForTab
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .frame(minWidth: 1200, minHeight: 800)
+        }
+        .frame(minWidth: 1200, minHeight: 800)
             .background(Color(nsColor: NSColor.windowBackgroundColor))
         } else {
             LoginView()
@@ -4319,8 +4319,8 @@ struct FullAppWindowView: View {
         VStack(alignment: .leading, spacing: 0) {
             // App Header
             HStack(spacing: 10) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 24))
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 24))
                     .foregroundColor(.blue)
                 Text("Focus")
                     .font(.system(size: 20, weight: .bold))
@@ -4372,11 +4372,11 @@ struct FullAppWindowView: View {
     }
     
     private func sidebarItem(index: Int, title: String, icon: String, color: Color) -> some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                selectedTab = index
-            }
-        } label: {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedTab = index
+                        }
+                    } label: {
             HStack(spacing: 12) {
                 Image(systemName: icon)
                     .font(.system(size: 16))
@@ -4390,14 +4390,14 @@ struct FullAppWindowView: View {
                 Spacer()
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+                        .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(selectedTab == index ? color : Color.clear)
             )
-        }
-        .buttonStyle(.plain)
-    }
+                    }
+                    .buttonStyle(.plain)
+                }
     
     @ViewBuilder
     private var contentForTab: some View {
@@ -4668,13 +4668,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // Prevent Command+Q from quitting - keep menu bar icon visible
-        // User can force quit via Activity Monitor or Option+Command+Q if needed
+        // The app is menu bar based, so just stay running
         print("App termination cancelled - app stays in menu bar")
         
-        // Hide all windows instead of quitting
-        for window in NSApp.windows {
-            window.orderOut(nil)
-        }
+        // Don't hide windows - just prevent termination
+        // Windows will close naturally when user clicks close button
         
         return .terminateCancel  // Prevent quitting, keep menu bar icon
     }
