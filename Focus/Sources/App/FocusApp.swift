@@ -6189,39 +6189,51 @@ class FocusSessionManager: ObservableObject {
     }
     
     func endSession() {
-        countdownTimer?.invalidate()
-        countdownTimer = nil
+        // Ensure this runs on main thread and only once
+        guard isSessionActive else { return }
         
-        // Track focus time if we have a start time
-        if let startTime = sessionStartTime {
-            let focusSeconds = Int(Date().timeIntervalSince(startTime))
-            FocusStatsManager.shared.addFocusTime(focusSeconds)
-            FocusStatsManager.shared.completeSession()
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Stop timer first
+            self.countdownTimer?.invalidate()
+            self.countdownTimer = nil
+            
+            // Track focus time if we have a start time
+            if let startTime = self.sessionStartTime {
+                let focusSeconds = Int(Date().timeIntervalSince(startTime))
+                FocusStatsManager.shared.addFocusTime(focusSeconds)
+                FocusStatsManager.shared.completeSession()
+            }
+            
+            // Disable DND and stop monitoring if we enabled it
+            if let task = self.activeTask, case .timeBlock(let blockType) = task.type, blockType == .focus {
+                self.disableDND()
+                AppMonitor.shared.stopMonitoring()
+            }
+            
+            // Hide countdown window
+            self.hideCountdownWindow()
+            
+            print("DEBUG: Ended focus session for '\(self.activeTask?.title ?? "unknown")'")
+            
+            // Clear state
+            self.activeTask = nil
+            self.isSessionActive = false
+            self.timeRemaining = 0
+            self.sessionStartTime = nil
         }
-        
-        // Disable DND and stop monitoring if we enabled it
-        if let task = activeTask, case .timeBlock(let blockType) = task.type, blockType == .focus {
-            disableDND()
-            AppMonitor.shared.stopMonitoring()
-        }
-        
-        hideCountdownWindow()
-        
-        print("DEBUG: Ended focus session for '\(activeTask?.title ?? "unknown")'")
-        
-        activeTask = nil
-        isSessionActive = false
-        timeRemaining = 0
-        sessionStartTime = nil
     }
     
     private func updateCountdown() {
+        guard isSessionActive else { return }
+        
         timeRemaining -= 1
         
         if timeRemaining <= 0 {
             endSession()
         } else {
-            // Update countdown window
+            // Update countdown window (already on main thread from timer)
             updateCountdownWindow()
         }
     }
@@ -6229,27 +6241,19 @@ class FocusSessionManager: ObservableObject {
     // MARK: - DND Control
     
     private func enableDND() {
-        // Use shortcuts to enable Focus mode on macOS
-        let script = """
-        tell application "System Events"
-            tell application process "ControlCenter"
-                -- Try to enable Do Not Disturb via AppleScript
-            end tell
-        end tell
-        """
-        
-        // Use shell command to enable Focus mode
-        let task = Process()
-        task.launchPath = "/usr/bin/shortcuts"
-        task.arguments = ["run", "Turn On Do Not Disturb"]
-        
-        do {
-            try task.run()
-            print("DEBUG: Enabled Do Not Disturb mode")
-        } catch {
-            // Fallback: Use AppleScript approach
-            print("DEBUG: Could not run shortcut, trying alternative method")
-            enableDNDFallback()
+        // Run DND enable in background to prevent blocking/crashes
+        DispatchQueue.global(qos: .background).async {
+            let task = Process()
+            task.launchPath = "/usr/bin/shortcuts"
+            task.arguments = ["run", "Turn On Do Not Disturb"]
+            
+            do {
+                try task.run()
+                print("DEBUG: Enabled Do Not Disturb mode")
+            } catch {
+                print("DEBUG: Could not run shortcut, trying alternative method: \(error)")
+                self.enableDNDFallback()
+            }
         }
     }
     
@@ -6269,16 +6273,19 @@ class FocusSessionManager: ObservableObject {
     }
     
     private func disableDND() {
-        let task = Process()
-        task.launchPath = "/usr/bin/shortcuts"
-        task.arguments = ["run", "Turn Off Do Not Disturb"]
-        
-        do {
-            try task.run()
-            print("DEBUG: Disabled Do Not Disturb mode")
-        } catch {
-            print("DEBUG: Could not run shortcut to disable DND")
-            disableDNDFallback()
+        // Run DND disable in background to prevent blocking/crashes
+        DispatchQueue.global(qos: .background).async {
+            let task = Process()
+            task.launchPath = "/usr/bin/shortcuts"
+            task.arguments = ["run", "Turn Off Do Not Disturb"]
+            
+            do {
+                try task.run()
+                print("DEBUG: Disabled Do Not Disturb mode")
+            } catch {
+                print("DEBUG: Could not run shortcut to disable DND: \(error)")
+                self.disableDNDFallback()
+            }
         }
     }
     
@@ -6297,11 +6304,15 @@ class FocusSessionManager: ObservableObject {
     
     private func showCountdownWindow() {
         guard let task = activeTask else { return }
-        
-        DispatchQueue.main.async {
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
             // Close existing window if any
             self.countdownWindow?.close()
-            
+            self.countdownKeepOnTopTimer?.invalidate()
+            self.countdownKeepOnTopTimer = nil
+
             let contentView = FocusCountdownView(manager: self)
             let hostingView = NSHostingView(rootView: contentView)
             hostingView.frame = NSRect(x: 0, y: 0, width: 220, height: 90)
@@ -6342,7 +6353,6 @@ class FocusSessionManager: ObservableObject {
             self.countdownWindow = window
             
             // Keep countdown window on top - essential for full-screen apps
-            self.countdownKeepOnTopTimer?.invalidate()
             self.countdownKeepOnTopTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
                 guard let self = self, let window = self.countdownWindow else { return }
                 window.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)
@@ -6356,7 +6366,8 @@ class FocusSessionManager: ObservableObject {
     }
     
     private func hideCountdownWindow() {
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
             self.countdownKeepOnTopTimer?.invalidate()
             self.countdownKeepOnTopTimer = nil
             self.countdownWindow?.close()
