@@ -7,7 +7,6 @@
 
 import SwiftUI
 import UserNotifications
-import Combine
 #if os(macOS)
 import AppKit
 #endif
@@ -962,13 +961,8 @@ struct CheckmarkShape: Shape {
 }
 
 struct MenuBarIconView: View {
-    // Use @State + Timer to poll focus state instead of @ObservedObject on singleton
-    // This avoids Combine subscription leaks that cause crashes over time
-    @State private var isActive = false
-    @State private var timeRemaining: TimeInterval = 0
-    
-    // Timer to poll focus state every second
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    // Simple static icon - no timers, no Combine, no subscriptions
+    // Countdown is shown in the floating window instead
     
     private static func loadLogo() -> NSImage? {
         return loadAppLogo()
@@ -991,38 +985,10 @@ struct MenuBarIconView: View {
     private static let cachedIcon = createIcon()
     
     var body: some View {
-        HStack(spacing: 4) {
-            if let icon = Self.cachedIcon {
-                Image(nsImage: icon)
-            } else {
-                Image(systemName: "checkmark.circle.fill")
-            }
-            
-            // Show countdown in menu bar during focus sessions
-            if isActive {
-                Text(menuBarTimeString)
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundColor(.orange)
-            }
-        }
-        .onReceive(timer) { _ in
-            // Poll FocusSessionManager directly - no Combine subscription overhead
-            let session = FocusSessionManager.shared
-            isActive = session.isSessionActive
-            timeRemaining = session.timeRemaining
-        }
-    }
-    
-    private var menuBarTimeString: String {
-        let total = Int(timeRemaining)
-        if total <= 0 { return "" }
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let seconds = total % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        if let icon = Self.cachedIcon {
+            Image(nsImage: icon)
         } else {
-            return String(format: "%d:%02d", minutes, seconds)
+            Image(systemName: "checkmark.circle.fill")
         }
     }
 }
