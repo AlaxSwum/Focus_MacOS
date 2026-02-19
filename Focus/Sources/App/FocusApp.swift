@@ -4633,14 +4633,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
     
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Prevent Command+Q from quitting - keep menu bar icon visible
-        // The app is menu bar based, so just stay running
-        print("App termination cancelled - app stays in menu bar")
-        
-        // Don't hide windows - just prevent termination
-        // Windows will close naturally when user clicks close button
-        
-        return .terminateCancel  // Prevent quitting, keep menu bar icon
+        // Prevent Command+Q from quitting - hide windows instead of black screen
+        print("App termination intercepted - hiding windows instead of quitting")
+
+        for window in NSApplication.shared.windows {
+            window.orderOut(nil)
+        }
+
+        return .terminateCancel
     }
     
     func startTaskMonitoring() {
@@ -6155,40 +6155,38 @@ class FocusSessionManager: ObservableObject {
     }
     
     func endSession() {
-        // Ensure this runs on main thread and only once
+        // Guard first - always called on main thread (Timer or SwiftUI action)
         guard isSessionActive else { return }
-        
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            // Stop timer first
-            self.countdownTimer?.invalidate()
-            self.countdownTimer = nil
-            
-            // Track focus time if we have a start time
-            if let startTime = self.sessionStartTime {
-                let focusSeconds = Int(Date().timeIntervalSince(startTime))
-                FocusStatsManager.shared.addFocusTime(focusSeconds)
-                FocusStatsManager.shared.completeSession()
-            }
-            
-            // Disable DND and stop monitoring if we enabled it
-            if let task = self.activeTask, case .timeBlock(let blockType) = task.type, blockType == .focus {
-                self.disableDND()
-                AppMonitor.shared.stopMonitoring()
-            }
-            
-            // Hide countdown window
-            self.hideCountdownWindow()
-            
-            print("DEBUG: Ended focus session for '\(self.activeTask?.title ?? "unknown")'")
-            
-            // Clear state
-            self.activeTask = nil
-            self.isSessionActive = false
-            self.timeRemaining = 0
-            self.sessionStartTime = nil
+
+        // Mark false IMMEDIATELY to prevent timer re-entry
+        isSessionActive = false
+        timeRemaining = 0
+
+        // Stop countdown timer right away
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+
+        // Track focus time
+        if let startTime = sessionStartTime {
+            let focusSeconds = Int(Date().timeIntervalSince(startTime))
+            FocusStatsManager.shared.addFocusTime(focusSeconds)
+            FocusStatsManager.shared.completeSession()
         }
+
+        // Disable DND and stop monitoring if we enabled it
+        if let task = activeTask, case .timeBlock(let blockType) = task.type, blockType == .focus {
+            disableDND()
+            AppMonitor.shared.stopMonitoring()
+        }
+
+        print("DEBUG: Ended focus session for '\(activeTask?.title ?? "unknown")'")
+
+        // Clear remaining state
+        activeTask = nil
+        sessionStartTime = nil
+
+        // Hide window last - state is cleared so SwiftUI won't re-render stale data
+        hideCountdownWindow()
     }
     
     private func updateCountdown() {
@@ -6332,13 +6330,13 @@ class FocusSessionManager: ObservableObject {
     }
     
     private func hideCountdownWindow() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.countdownKeepOnTopTimer?.invalidate()
-            self.countdownKeepOnTopTimer = nil
-            self.countdownWindow?.close()
-            self.countdownWindow = nil
-        }
+        // Always called on main thread - no async needed
+        countdownKeepOnTopTimer?.invalidate()
+        countdownKeepOnTopTimer = nil
+        // orderOut hides the window without destroying it, avoiding the
+        // @ObservedObject Combine teardown race that caused EXC_BAD_ACCESS
+        countdownWindow?.orderOut(nil)
+        countdownWindow = nil
     }
     
     // Helper to format time
